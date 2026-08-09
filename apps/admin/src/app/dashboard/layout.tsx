@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+import { AdminShell } from '@/components/admin-shell';
 import { useAuth } from '@/lib/auth-context';
 
 export default function DashboardLayout({ children }: LayoutProps<'/dashboard'>) {
@@ -23,5 +24,5 @@ export default function DashboardLayout({ children }: LayoutProps<'/dashboard'>)
     );
   }
 
-  return <div className="min-h-screen bg-muted">{children}</div>;
+  return <AdminShell>{children}</AdminShell>;
 }

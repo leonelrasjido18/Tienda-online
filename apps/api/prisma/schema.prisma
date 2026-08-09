@@ -1,5 +1,6 @@
-// Esquema base de la Fase 0: autenticación de staff y auditoría.
-// El catálogo, ventas, personalización e importación se agregan en fases siguientes.
+// Fase 0: autenticación de staff y auditoría.
+// Fase 1: catálogo deportivo (ligas, equipos, temporadas, productos, variantes, stock).
+// Ventas, personalización e importación se agregan en fases siguientes.
 
 generator client {
   provider = "prisma-client-js"
@@ -60,4 +61,290 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Catálogo (Fase 1)
+// ---------------------------------------------------------------------------
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum FulfillmentMode {
+  IN_STOCK
+  PREORDER
+  BOTH
+}
+
+enum StockMovementType {
+  SALE
+  RETURN
+  ADJUSTMENT
+  RECEIPT
+}
+
+model League {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  logoUrl   String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teams      Team[]
+  products   Product[]
+  sizeGuides SizeGuide[]
+
+  @@map("leagues")
+}
+
+model Team {
+  id        String   @id @default(uuid())
+  leagueId  String
+  league    League   @relation(fields: [leagueId], references: [id], onDelete: Restrict)
+  name      String
+  slug      String   @unique
+  crestUrl  String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@index([leagueId])
+  @@map("teams")
+}
+
+model Season {
+  id        String   @id @default(uuid())
+  label     String   @unique
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  products Product[]
+
+  @@map("seasons")
+}
+
+model Category {
+  id        String     @id @default(uuid())
+  parentId  String?
+  parent    Category?  @relation("CategoryToParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Category[] @relation("CategoryToParent")
+  name      String
+  slug      String     @unique
+  imageUrl  String?
+  position  Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  products   Product[]
+  sizeGuides SizeGuide[]
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+model Brand {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  logoUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@map("brands")
+}
+
+model Collection {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  imageUrl    String?
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products ProductCollection[]
+
+  @@map("collections")
+}
+
+model ProductCollection {
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  position     Int        @default(0)
+
+  @@id([productId, collectionId])
+  @@map("product_collections")
+}
+
+model SizeGuide {
+  id          String     @id @default(uuid())
+  name        String
+  leagueId    String?
+  league      League?    @relation(fields: [leagueId], references: [id], onDelete: SetNull)
+  categoryId  String?
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  contentHtml String     @db.Text
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  products Product[]
+
+  @@map("size_guides")
+}
+
+model Product {
+  id               String          @id @default(uuid())
+  slug             String          @unique
+  name             String
+  description      String?         @db.Text
+  status           ProductStatus   @default(DRAFT)
+  fulfillmentMode  FulfillmentMode @default(IN_STOCK)
+  preorderLeadDays Int?
+
+  brandId     String?
+  brand       Brand?     @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  categoryId  String?
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  leagueId    String?
+  league      League?    @relation(fields: [leagueId], references: [id], onDelete: SetNull)
+  teamId      String?
+  team        Team?      @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  seasonId    String?
+  season      Season?    @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  sizeGuideId String?
+  sizeGuide   SizeGuide? @relation(fields: [sizeGuideId], references: [id], onDelete: SetNull)
+
+  seoTitle       String?
+  seoDescription String?
+
+  position    Int       @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  options     ProductOption[]
+  variants    ProductVariant[]
+  images      ProductImage[]
+  collections ProductCollection[]
+
+  @@index([status])
+  @@index([leagueId])
+  @@index([teamId])
+  @@index([categoryId])
+  @@index([brandId])
+  @@map("products")
+}
+
+model ProductOption {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String
+  position  Int     @default(0)
+
+  values ProductOptionValue[]
+
+  @@index([productId])
+  @@map("product_options")
+}
+
+model ProductOptionValue {
+  id       String        @id @default(uuid())
+  optionId String
+  option   ProductOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  value    String
+  position Int           @default(0)
+
+  variantLinks VariantOptionValue[]
+  images       ProductImage[]
+
+  @@index([optionId])
+  @@map("product_option_values")
+}
+
+model ProductVariant {
+  id                  String   @id @default(uuid())
+  productId           String
+  product             Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku                 String   @unique
+  priceCents          Int
+  compareAtPriceCents Int?
+  costCents           Int?
+  weightGrams         Int?
+  barcode             String?
+  position            Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  optionValues VariantOptionValue[]
+  inventory    InventoryItem?
+  movements    StockMovement[]
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model VariantOptionValue {
+  variantId String
+  variant   ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  valueId   String
+  value     ProductOptionValue @relation(fields: [valueId], references: [id], onDelete: Cascade)
+
+  @@id([variantId, valueId])
+  @@map("variant_option_values")
+}
+
+model ProductImage {
+  id            String              @id @default(uuid())
+  productId     String
+  product       Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  optionValueId String?
+  optionValue   ProductOptionValue? @relation(fields: [optionValueId], references: [id], onDelete: SetNull)
+  url           String
+  alt           String?
+  position      Int                 @default(0)
+  createdAt     DateTime            @default(now())
+
+  @@index([productId])
+  @@index([optionValueId])
+  @@map("product_images")
+}
+
+model InventoryItem {
+  id               String         @id @default(uuid())
+  variantId        String         @unique
+  variant          ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity         Int            @default(0)
+  reserved         Int            @default(0)
+  trackInventory   Boolean        @default(true)
+  allowPreorder    Boolean        @default(false)
+  preorderLeadDays Int?
+  updatedAt        DateTime       @updatedAt
+
+  @@map("inventory_items")
+}
+
+model StockMovement {
+  id        String            @id @default(uuid())
+  variantId String
+  variant   ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  type      StockMovementType
+  quantity  Int
+  reason    String?
+  createdAt DateTime          @default(now())
+
+  @@index([variantId])
+  @@map("stock_movements")
 }
