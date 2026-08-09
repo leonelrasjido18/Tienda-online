@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { productCustomizationSchema } from '../customization/template.schema';
 import { moneyCentsSchema, paginationQuerySchema, slugSchema } from './common.schema';
 
 export const PRODUCT_STATUSES = ['DRAFT', 'ACTIVE', 'ARCHIVED'] as const;
@@ -163,6 +164,7 @@ export const productDetailSchema = upsertProductSchema.extend({
   options: z.array(productOptionSchema),
   variants: z.array(variantSchema),
   images: z.array(productImageSchema),
+  customization: productCustomizationSchema.nullable(),
 });
 export type ProductDetailDto = z.infer<typeof productDetailSchema>;
 

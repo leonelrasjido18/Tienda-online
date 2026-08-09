@@ -3,6 +3,7 @@ import type { ProductDetailDto, ProductFacetsDto, ProductListItemDto, ProductLis
 import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
+import { TemplatesService } from '../customization/templates.service';
 
 // Catálogo boutique (una sola clienta, cientos de productos, no miles): se resuelve
 // el ordenamiento por precio en memoria sobre un lote acotado en vez de duplicar el
@@ -17,7 +18,10 @@ type FacetFilters = Pick<ProductListQuery, 'q' | 'leagueSlug' | 'teamSlug' | 'ca
 
 @Injectable()
 export class PublicCatalogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly templates: TemplatesService,
+  ) {}
 
   async listProducts(query: ProductListQuery) {
     const where = this.buildWhere(query);
@@ -127,6 +131,8 @@ export class PublicCatalogService {
       throw new NotFoundException('El producto no existe');
     }
 
+    const customization = await this.templates.get(product.id);
+
     return {
       id: product.id,
       slug: product.slug,
@@ -188,6 +194,7 @@ export class PublicCatalogService {
           preorderLeadDays: variant.inventory?.preorderLeadDays ?? null,
         },
       })),
+      customization,
     };
   }
 

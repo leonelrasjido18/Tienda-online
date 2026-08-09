@@ -95,9 +95,11 @@ model League {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  teams      Team[]
-  products   Product[]
-  sizeGuides SizeGuide[]
+  teams        Team[]
+  products     Product[]
+  sizeGuides   SizeGuide[]
+  fonts        LeagueFont[]
+  patchLeagues PatchLeague[]
 
   @@map("leagues")
 }
@@ -234,10 +236,11 @@ model Product {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  options     ProductOption[]
-  variants    ProductVariant[]
-  images      ProductImage[]
-  collections ProductCollection[]
+  options       ProductOption[]
+  variants      ProductVariant[]
+  images        ProductImage[]
+  collections   ProductCollection[]
+  customization CustomizationTemplate?
 
   @@index([status])
   @@index([leagueId])
@@ -347,4 +350,87 @@ model StockMovement {
 
   @@index([variantId])
   @@map("stock_movements")
+}
+
+// ---------------------------------------------------------------------------
+// Personalización (Fase 2)
+// ---------------------------------------------------------------------------
+
+model LeagueFont {
+  id              String   @id @default(uuid())
+  leagueId        String
+  league          League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  name            String
+  fontFileUrl     String
+  fillColor       String   @default("#FFFFFF")
+  strokeColor     String?
+  strokeWidthPx   Int      @default(0)
+  letterSpacingPx Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  templates CustomizationTemplate[]
+
+  @@index([leagueId])
+  @@map("league_fonts")
+}
+
+model Patch {
+  id         String   @id @default(uuid())
+  name       String
+  imageUrl   String
+  priceCents Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  leagues  PatchLeague[]
+  products ProductCustomizationOption[]
+
+  @@map("patches")
+}
+
+model PatchLeague {
+  patchId  String
+  patch    Patch  @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  leagueId String
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@id([patchId, leagueId])
+  @@map("patch_leagues")
+}
+
+model CustomizationTemplate {
+  id               String      @id @default(uuid())
+  productId        String      @unique
+  product          Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  enableName       Boolean     @default(true)
+  enableNumber     Boolean     @default(true)
+  enablePatches    Boolean     @default(false)
+  maxNameLength    Int         @default(12)
+  minNumber        Int         @default(1)
+  maxNumber        Int         @default(99)
+  nameExtraCents   Int         @default(0)
+  numberExtraCents Int         @default(0)
+  fontId           String?
+  font             LeagueFont? @relation(fields: [fontId], references: [id], onDelete: SetNull)
+  namePrintArea    Json
+  numberPrintArea  Json
+  patchPrintArea   Json?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  patchOptions ProductCustomizationOption[]
+
+  @@map("customization_templates")
+}
+
+model ProductCustomizationOption {
+  id         String                 @id @default(uuid())
+  templateId String
+  template   CustomizationTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  patchId    String
+  patch      Patch                  @relation(fields: [patchId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, patchId])
+  @@map("product_customization_options")
 }

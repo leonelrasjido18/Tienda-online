@@ -4,6 +4,8 @@ import { formatCentsAsArs, type ProductDetailDto } from '@tienda/shared';
 import { buttonVariants } from '@tienda/ui';
 import { useMemo, useState } from 'react';
 
+import { CustomizationBlock, type CustomizationValue } from './customization-block';
+
 type VariantDto = ProductDetailDto['variants'][number];
 
 function combinationKey(ids: string[]): string {
@@ -21,6 +23,11 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
     }
     return map;
   });
+  const [customizationValue, setCustomizationValue] = useState<CustomizationValue>({
+    patchIds: [],
+    extraCents: 0,
+    valid: true,
+  });
 
   const variantByKey = useMemo(() => {
     const map = new Map<string, VariantDto>();
@@ -37,6 +44,10 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
   const images = product.images.length > 0 ? product.images : [];
   const selectedImage =
     images.find((img) => img.optionValueId && selectedIds.includes(img.optionValueId)) ?? images[0];
+
+  const totalCents = activeVariant ? activeVariant.priceCents + customizationValue.extraCents : undefined;
+  const canBuy = !!activeVariant && activeVariant.inventory.available > 0 && customizationValue.valid;
+  const canPreorder = !!activeVariant && activeVariant.inventory.allowPreorder && customizationValue.valid;
 
   return (
     <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
@@ -68,8 +79,13 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
         <h1 className="mt-1 text-2xl font-semibold">{product.name}</h1>
 
         <p className="mt-4 text-3xl font-bold">
-          {activeVariant ? formatCentsAsArs(activeVariant.priceCents) : 'Elegí las opciones'}
+          {totalCents !== undefined ? formatCentsAsArs(totalCents) : 'Elegí las opciones'}
         </p>
+        {customizationValue.extraCents > 0 && activeVariant && (
+          <p className="text-xs text-muted-foreground">
+            {formatCentsAsArs(activeVariant.priceCents)} + {formatCentsAsArs(customizationValue.extraCents)} de personalización
+          </p>
+        )}
 
         {product.options.map((option) => (
           <div key={option.id} className="mt-6">
@@ -101,17 +117,17 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
           <AvailabilityBadge product={product} variant={activeVariant} />
         </div>
 
-        <button
-          type="button"
-          disabled={!activeVariant || activeVariant.inventory.available <= 0}
-          className={buttonVariants({ className: 'mt-6 w-full' })}
-        >
-          {activeVariant?.inventory.available && activeVariant.inventory.available > 0
-            ? 'Agregar al carrito'
-            : activeVariant?.inventory.allowPreorder
-              ? 'Pedir por encargo'
-              : 'Sin stock'}
+        <button type="button" disabled={!canBuy && !canPreorder} className={buttonVariants({ className: 'mt-6 w-full' })}>
+          {canBuy ? 'Agregar al carrito' : canPreorder ? 'Pedir por encargo' : 'Sin stock'}
         </button>
+
+        {product.customization && selectedImage && (
+          <CustomizationBlock
+            customization={product.customization}
+            imageUrl={selectedImage.url}
+            onChange={setCustomizationValue}
+          />
+        )}
 
         {product.description && (
           <div className="mt-8 border-t border-border pt-6 text-sm text-muted-foreground">

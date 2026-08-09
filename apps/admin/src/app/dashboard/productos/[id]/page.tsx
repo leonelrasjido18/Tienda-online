@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 
 import { useApi } from '@/lib/use-api';
+import { ProductCustomizationEditor } from './product-customization-editor';
 import { ProductGeneralForm } from './product-general-form';
 import { ProductImagesManager } from './product-images-manager';
 import { ProductOptionsEditor } from './product-options-editor';
@@ -56,6 +57,17 @@ export default function ProductEditorPage() {
       <section className="rounded-lg border border-border bg-background p-6">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Fotos</h2>
         <ProductImagesManager productId={productId} images={product.images} options={product.options} />
+      </section>
+
+      <section className="rounded-lg border border-border bg-background p-6">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Personalización (nombre, dorsal y parches)
+        </h2>
+        <ProductCustomizationEditor
+          key={product.customization?.id ?? 'none'}
+          productId={productId}
+          product={product}
+        />
       </section>
     </div>
   );

@@ -15,6 +15,8 @@ const NAV_LINKS = [
   { href: '/dashboard/temporadas', label: 'Temporadas' },
   { href: '/dashboard/marcas', label: 'Marcas' },
   { href: '/dashboard/categorias', label: 'Categorías' },
+  { href: '/dashboard/tipografias', label: 'Tipografías' },
+  { href: '/dashboard/parches', label: 'Parches' },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {

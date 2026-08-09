@@ -1,9 +1,19 @@
+import { randomUUID } from 'node:crypto';
+import { copyFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import sharp from 'sharp';
 
 import { generateVariantCombinations, suggestSku } from '../src/catalog/products/variant-generator';
 
 const prisma = new PrismaClient();
+const UPLOADS_ROOT = join(process.cwd(), 'uploads');
+
+// Fuente del sistema (Windows) usada sólo para tener un .ttf real en el entorno de
+// desarrollo local; en producción la clienta sube sus propias tipografías.
+const DEV_SYSTEM_FONT = 'C:\\Windows\\Fonts\\impact.ttf';
 
 async function seedOwner() {
   const email = process.env.SEED_OWNER_EMAIL ?? 'owner@tienda.local';
@@ -169,8 +179,78 @@ async function seedCatalog() {
     }
   }
 
+  await seedProductImage(demoProduct.id);
+  await seedCustomization(demoProduct.id, selecciones.id);
+
   console.log(`Catálogo demo listo. Producto: ${demoProduct.name} (${demoProduct.slug})`);
   console.log(`Equipos: ${liverpool.name}, ${realMadrid.name}, ${argentina.name}`);
+}
+
+async function seedProductImage(productId: string) {
+  const existing = await prisma.productImage.findFirst({ where: { productId } });
+  if (existing) return;
+
+  const folder = join(UPLOADS_ROOT, 'products');
+  await mkdir(folder, { recursive: true });
+  const filename = `${randomUUID()}.webp`;
+
+  // Placeholder simple (sin foto real todavía): alcanza para probar el pipeline
+  // completo de personalización de punta a punta.
+  await sharp({
+    create: { width: 900, height: 1100, channels: 3, background: { r: 40, g: 70, b: 160 } },
+  })
+    .webp({ quality: 82 })
+    .toFile(join(folder, filename));
+
+  await prisma.productImage.create({
+    data: { productId, url: `/uploads/products/${filename}`, alt: 'Camiseta (foto de referencia)', position: 0 },
+  });
+}
+
+async function seedCustomization(productId: string, leagueId: string) {
+  const existingTemplate = await prisma.customizationTemplate.findUnique({ where: { productId } });
+  if (existingTemplate) return;
+
+  let font = await prisma.leagueFont.findFirst({ where: { leagueId, name: 'Impact Dev' } });
+  if (!font) {
+    const folder = join(UPLOADS_ROOT, 'fonts');
+    await mkdir(folder, { recursive: true });
+    const filename = `${randomUUID()}.ttf`;
+    try {
+      await copyFile(DEV_SYSTEM_FONT, join(folder, filename));
+    } catch {
+      console.warn('No se encontró una fuente del sistema para el seed; se omite la personalización demo.');
+      return;
+    }
+    font = await prisma.leagueFont.create({
+      data: {
+        leagueId,
+        name: 'Impact Dev',
+        fontFileUrl: `/uploads/fonts/${filename}`,
+        fillColor: '#FFFFFF',
+        strokeColor: '#0B1F4D',
+        strokeWidthPx: 3,
+        letterSpacingPx: 2,
+      },
+    });
+  }
+
+  await prisma.customizationTemplate.create({
+    data: {
+      productId,
+      enableName: true,
+      enableNumber: true,
+      enablePatches: false,
+      maxNameLength: 12,
+      minNumber: 1,
+      maxNumber: 99,
+      nameExtraCents: 150000,
+      numberExtraCents: 100000,
+      fontId: font.id,
+      namePrintArea: { x: 0.3, y: 0.22, width: 0.4, height: 0.07, rotation: 0, align: 'center' },
+      numberPrintArea: { x: 0.35, y: 0.32, width: 0.3, height: 0.16, rotation: 0, align: 'center' },
+    },
+  });
 }
 
 async function main() {

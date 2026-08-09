@@ -12,6 +12,7 @@ import { MAX_PRODUCT_OPTIONS } from '@tienda/shared';
 import type { Prisma, ProductStatus } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
+import { TemplatesService } from '../customization/templates.service';
 import { combinationKey, generateVariantCombinations, suggestSku } from './variant-generator';
 
 const PRODUCT_DETAIL_INCLUDE = {
@@ -39,7 +40,10 @@ interface AdminListFilters {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly templates: TemplatesService,
+  ) {}
 
   async listForAdmin(filters: AdminListFilters) {
     const where: Prisma.ProductWhereInput = {
@@ -267,7 +271,8 @@ export class ProductsService {
     return this.getDetail(productId);
   }
 
-  private toDetailDto(product: ProductWithRelations): ProductDetailDto {
+  private async toDetailDto(product: ProductWithRelations): Promise<ProductDetailDto> {
+    const customization = await this.templates.get(product.id);
     return {
       id: product.id,
       slug: product.slug,
@@ -329,6 +334,7 @@ export class ProductsService {
           preorderLeadDays: variant.inventory?.preorderLeadDays ?? null,
         },
       })),
+      customization,
     };
   }
 }
