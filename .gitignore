@@ -35,6 +35,7 @@ test-results/
 .idea/
 .DS_Store
 Thumbs.db
+.claude/
 
 # uploads (dev)
 apps/api/uploads/

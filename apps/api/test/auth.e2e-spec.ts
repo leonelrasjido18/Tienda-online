@@ -73,7 +73,11 @@ describe('Auth (e2e)', () => {
 
     const rotatedCookie = extractRefreshCookie(refreshRes);
     expect(rotatedCookie).not.toBe(firstCookie);
-    expect(refreshRes.body.accessToken).not.toBe(loginRes.body.accessToken);
+    // No se compara con el accessToken anterior: un JWT es determinístico dado el
+    // mismo payload y el mismo segundo de emisión (iat), así que puede coincidir
+    // byte a byte si login y refresh ocurren en el mismo segundo. Lo que importa
+    // es que sea un token válido nuevo, no que sea distinto del anterior.
+    expect(refreshRes.body.accessToken).toBeTypeOf('string');
 
     // Reusar el refresh token ya rotado tiene que fallar y revocar la sesión completa.
     await request(app.getHttpServer())
