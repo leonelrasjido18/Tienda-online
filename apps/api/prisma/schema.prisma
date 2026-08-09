@@ -1,0 +1,63 @@
+// Esquema base de la Fase 0: autenticación de staff y auditoría.
+// El catálogo, ventas, personalización e importación se agregan en fases siguientes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  OWNER
+  STAFF
+}
+
+model StaffUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         StaffRole @default(STAFF)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  @@map("staff_users")
+}
+
+model RefreshToken {
+  id              String    @id @default(uuid())
+  staffUserId     String
+  staffUser       StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  replacedByToken String?
+  createdByIp     String?
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+
+  @@index([staffUserId])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  staffUserId String?
+  staffUser   StaffUser? @relation(fields: [staffUserId], references: [id], onDelete: SetNull)
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

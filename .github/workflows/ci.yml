@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  DATABASE_URL: postgresql://tienda:tienda@localhost:5432/tienda_online?schema=public
+  REDIS_URL: redis://localhost:6379
+  JWT_ACCESS_SECRET: ci-only-access-secret-not-for-prod
+  COOKIE_SECRET: ci-only-cookie-secret-not-for-prod
+  ADMIN_URL: http://localhost:3002
+  STOREFRONT_URL: http://localhost:3000
+  NODE_ENV: test
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tienda
+          POSTGRES_PASSWORD: tienda
+          POSTGRES_DB: tienda_online
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tienda -d tienda_online"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Instalar dependencias (incluye prisma generate)
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Aplicar migraciones
+        run: pnpm --filter api exec prisma migrate deploy
+
+      - name: E2E tests de la API
+        run: pnpm --filter api test:e2e
