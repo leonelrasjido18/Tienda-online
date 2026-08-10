@@ -179,20 +179,38 @@ export class BalanceService {
     if (!link) {
       throw new NotFoundException('El link de pago no existe');
     }
-    if (link.status === 'PAID') {
-      throw new BadRequestException('Este saldo ya fue pagado');
-    }
-    if (link.status !== 'PENDING' || link.expiresAt < new Date()) {
-      throw new BadRequestException('El link de pago venció. Escribinos para generar uno nuevo.');
-    }
 
-    const payment = await this.prisma.payment.create({
-      data: {
-        orderId: link.orderId,
-        kind: 'BALANCE',
-        provider: method,
-        amountCents: link.amountCents,
-      },
+    // La creación del pago se serializa por link con FOR UPDATE: dos requests
+    // simultáneos no pueden abrir dos cobros del mismo saldo (doble cargo al
+    // cliente). El segundo espera al primero y, dentro del lock, ve el cobro con
+    // pasarela ya en curso y se rechaza. La transferencia no cobra nada, así que
+    // no cuenta como "en curso" para este chequeo.
+    const payment = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM payment_links WHERE id = ${link.id} FOR UPDATE`;
+
+      const fresh = await tx.paymentLink.findUniqueOrThrow({ where: { id: link.id } });
+      if (fresh.status === 'PAID') {
+        throw new BadRequestException('Este saldo ya fue pagado');
+      }
+      if (fresh.status !== 'PENDING' || fresh.expiresAt < new Date()) {
+        throw new BadRequestException('El link de pago venció. Escribinos para generar uno nuevo.');
+      }
+
+      const inFlightCardPayment = await tx.payment.findFirst({
+        where: { orderId: link.orderId, kind: 'BALANCE', status: 'PENDING', provider: { not: 'bank_transfer' } },
+      });
+      if (inFlightCardPayment) {
+        throw new BadRequestException('Ya hay un pago en curso para este saldo. Revisá tu email o esperá unos minutos.');
+      }
+
+      return tx.payment.create({
+        data: {
+          orderId: link.orderId,
+          kind: 'BALANCE',
+          provider: method,
+          amountCents: link.amountCents,
+        },
+      });
     });
 
     if (method === 'bank_transfer') {
@@ -205,14 +223,22 @@ export class BalanceService {
     }
 
     const provider = this.payments.active();
-    const checkout = await provider.createCheckout({
-      paymentId: payment.id,
-      orderId: link.orderId,
-      orderToken: link.order.publicToken,
-      orderNumber: link.order.number,
-      kindLabel: 'Saldo + envío',
-      amountCents: link.amountCents,
-    });
+    let checkout;
+    try {
+      checkout = await provider.createCheckout({
+        paymentId: payment.id,
+        orderId: link.orderId,
+        orderToken: link.order.publicToken,
+        orderNumber: link.order.number,
+        kindLabel: 'Saldo + envío',
+        amountCents: link.amountCents,
+      });
+    } catch (error) {
+      // Si la pasarela falla, se borra el cobro recién creado para que no quede
+      // marcado como "en curso" y bloquee un reintento legítimo del cliente.
+      await this.prisma.payment.delete({ where: { id: payment.id } }).catch(() => undefined);
+      throw error;
+    }
 
     await this.prisma.$transaction([
       this.prisma.payment.update({

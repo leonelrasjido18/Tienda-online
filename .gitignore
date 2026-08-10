@@ -39,3 +39,6 @@ Thumbs.db
 
 # uploads (dev)
 apps/api/uploads/
+
+# Salida de scans de Strix (pentesting) — no versionar
+strix_runs/

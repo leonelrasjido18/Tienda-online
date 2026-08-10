@@ -133,9 +133,12 @@ export class UalaService implements PaymentProvider {
       return null;
     }
 
-    // Nunca se confía en body.status: se reconsulta el estado real a Ualá.
+    // Nunca se confía en el body: la referencia sale SIEMPRE de la orden reconsultada
+    // a Ualá. La app siempre setea external_reference al crear el checkout, así que si
+    // la respuesta de Ualá no lo trae es un uuid ajeno o una inconsistencia — se rechaza,
+    // nunca se cae al external_reference del POST (que controla el atacante).
     const order = await this.fetchOrder(uuid);
-    const paymentId = order.external_reference ?? body.external_reference;
+    const paymentId = order.external_reference;
     if (!paymentId || typeof order.amount !== 'number') {
       throw new UnauthorizedException('El webhook no referencia ningún pago conocido');
     }
