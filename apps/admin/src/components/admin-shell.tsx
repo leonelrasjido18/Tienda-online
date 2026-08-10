@@ -6,9 +6,12 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { useAuth } from '@/lib/auth-context';
+import { PushSubscribeButton } from './push-subscribe-button';
 
 const NAV_LINKS = [
   { href: '/dashboard', label: 'Inicio' },
+  { href: '/dashboard/pedidos', label: 'Pedidos' },
+  { href: '/dashboard/lotes', label: 'Lotes' },
   { href: '/dashboard/productos', label: 'Productos' },
   { href: '/dashboard/ligas', label: 'Ligas' },
   { href: '/dashboard/equipos', label: 'Equipos' },
@@ -17,6 +20,8 @@ const NAV_LINKS = [
   { href: '/dashboard/categorias', label: 'Categorías' },
   { href: '/dashboard/tipografias', label: 'Tipografías' },
   { href: '/dashboard/parches', label: 'Parches' },
+  { href: '/dashboard/envios', label: 'Envíos' },
+  { href: '/dashboard/ajustes', label: 'Ajustes' },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
@@ -46,9 +51,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="border-t border-border p-3">
+        <div className="space-y-2 border-t border-border p-3">
           <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
-          <Button variant="ghost" size="sm" className="mt-2 w-full justify-start px-0" onClick={() => void logout()}>
+          <PushSubscribeButton />
+          <Button variant="ghost" size="sm" className="w-full justify-start px-0" onClick={() => void logout()}>
             Cerrar sesión
           </Button>
         </div>
