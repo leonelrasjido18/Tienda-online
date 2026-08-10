@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 
 import { ApiError } from '@/lib/api';
+import { resolveImageUrl } from '@/lib/media';
 import { useApi } from '@/lib/use-api';
 
 const NONE = 'none';
@@ -99,7 +100,7 @@ export function ProductImagesManager({
           {images.map((image, index) => (
             <div key={image.id} className="space-y-2 rounded-lg border border-border p-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={image.url} alt={image.alt ?? ''} className="aspect-square w-full rounded object-cover" />
+              <img src={resolveImageUrl(image.url)} alt={image.alt ?? ''} className="aspect-square w-full rounded object-cover" />
 
               {allValues.length > 0 && (
                 <Select

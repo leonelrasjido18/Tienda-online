@@ -108,7 +108,7 @@ export class ProductsController {
   }
 
   @Post(':id/images')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 8 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
   async uploadImage(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     const { url } = await this.uploads.processAndStore(file, 'products');
     return this.products.attachImage(id, url, null);

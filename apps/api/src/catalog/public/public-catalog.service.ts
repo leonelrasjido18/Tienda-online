@@ -73,17 +73,7 @@ export class PublicCatalogService {
         _min: { priceCents: true },
         _max: { priceCents: true },
       }),
-      this.prisma.$queryRaw<{ value: string; count: bigint }[]>`
-        SELECT pov.value AS value, COUNT(DISTINCT p.id) AS count
-        FROM products p
-        JOIN product_variants pv ON pv."productId" = p.id
-        JOIN variant_option_values vov ON vov."variantId" = pv.id
-        JOIN product_option_values pov ON pov.id = vov."valueId"
-        JOIN product_options po ON po.id = pov."optionId" AND po.name = ${SIZE_OPTION_NAME}
-        WHERE p.status = 'ACTIVE'
-        GROUP BY pov.value
-        ORDER BY pov.value ASC
-      `,
+      this.getSizeFacet(filters),
     ]);
 
     const leagueIds = leagueGroups.map((g) => g.leagueId).filter((id): id is string => id !== null);
@@ -180,7 +170,7 @@ export class PublicCatalogService {
         sku: variant.sku,
         priceCents: variant.priceCents,
         compareAtPriceCents: variant.compareAtPriceCents,
-        costCents: variant.costCents,
+        costCents: null,
         weightGrams: variant.weightGrams,
         barcode: variant.barcode,
         position: variant.position,
@@ -274,6 +264,58 @@ export class PublicCatalogService {
       coverImageUrl: product.images[0]?.url ?? null,
       totalAvailable,
     };
+  }
+
+  private async getSizeFacet(filters: FacetFilters): Promise<{ value: string; count: bigint }[]> {
+    // Build dynamic WHERE conditions respecting active filters.
+    const conditions: string[] = [`p.status = 'ACTIVE'`];
+    const params: unknown[] = [];
+    let paramIdx = 1;
+
+    if (filters.q) {
+      conditions.push(`p.name ILIKE $${paramIdx}`);
+      params.push(`%${filters.q}%`);
+      paramIdx++;
+    }
+    if (filters.leagueSlug) {
+      conditions.push(`l.slug = $${paramIdx}`);
+      params.push(filters.leagueSlug);
+      paramIdx++;
+    }
+    if (filters.teamSlug) {
+      conditions.push(`t.slug = $${paramIdx}`);
+      params.push(filters.teamSlug);
+      paramIdx++;
+    }
+    if (filters.categorySlug) {
+      conditions.push(`c.slug = $${paramIdx}`);
+      params.push(filters.categorySlug);
+      paramIdx++;
+    }
+    if (filters.seasonId) {
+      conditions.push(`p."seasonId" = $${paramIdx}`);
+      params.push(filters.seasonId);
+      paramIdx++;
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const query = `
+      SELECT pov.value AS value, COUNT(DISTINCT p.id) AS count
+      FROM products p
+      JOIN product_variants pv ON pv."productId" = p.id
+      JOIN variant_option_values vov ON vov."variantId" = pv.id
+      JOIN product_option_values pov ON pov.id = vov."valueId"
+      JOIN product_options po ON po.id = pov."optionId" AND po.name = '${SIZE_OPTION_NAME}'
+      LEFT JOIN leagues l ON l.id = p."leagueId"
+      LEFT JOIN teams t ON t.id = p."teamId"
+      LEFT JOIN categories c ON c.id = p."categoryId"
+      WHERE ${whereClause}
+      GROUP BY pov.value
+      ORDER BY pov.value ASC
+    `;
+
+    return this.prisma.$queryRawUnsafe<{ value: string; count: bigint }[]>(query, ...params);
   }
 
   private paginate<T>(items: T[], query: Pick<ProductListQuery, 'page' | 'perPage'>, total: number) {

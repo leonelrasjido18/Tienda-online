@@ -25,6 +25,7 @@ import { useState } from 'react';
 import { Rnd } from 'react-rnd';
 
 import { ApiError } from '@/lib/api';
+import { resolveImageUrl } from '@/lib/media';
 import { useApi } from '@/lib/use-api';
 
 const PREVIEW_WIDTH = 480;
@@ -53,7 +54,6 @@ export function ProductCustomizationEditor({
 }) {
   const api = useApi();
   const queryClient = useQueryClient();
-  const coverImage = product.images[0];
   const c = product.customization;
 
   const { data: fonts } = useQuery({ queryKey: ['admin', 'fonts'], queryFn: () => api<LeagueFontDto[]>('/admin/fonts') });
@@ -70,6 +70,10 @@ export function ProductCustomizationEditor({
   const [nameExtraText, setNameExtraText] = useState(((c?.nameExtraCents ?? 0) / 100).toString());
   const [numberExtraText, setNumberExtraText] = useState(((c?.numberExtraCents ?? 0) / 100).toString());
   const [fontId, setFontId] = useState<string | null>(c?.font?.id ?? null);
+  const [customizationImageId, setCustomizationImageId] = useState<string | null>(
+    c?.customizationImageId ?? product.images[0]?.id ?? null,
+  );
+  const coverImage = product.images.find((img) => img.id === customizationImageId) ?? product.images[0];
   const [patchIds, setPatchIds] = useState<string[]>(c?.patches.map((p) => p.id) ?? []);
   const [nameArea, setNameArea] = useState<PrintArea>(c?.namePrintArea ?? defaultNameArea());
   const [numberArea, setNumberArea] = useState<PrintArea>(c?.numberPrintArea ?? defaultNumberArea());
@@ -97,6 +101,7 @@ export function ProductCustomizationEditor({
         nameExtraCents,
         numberExtraCents,
         fontId,
+        customizationImageId,
         namePrintArea: nameArea,
         numberPrintArea: numberArea,
         patchPrintArea: enablePatches ? patchArea : null,
@@ -148,47 +153,69 @@ export function ProductCustomizationEditor({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[480px_1fr]">
-        <div
-          className="relative overflow-hidden rounded-lg border border-border bg-muted"
-          style={{ width: PREVIEW_WIDTH, height: previewHeight }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={coverImage.url}
-            alt=""
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-            onLoad={(e) => {
-              const img = e.currentTarget;
-              if (img.naturalWidth > 0) {
-                setPreviewHeight(Math.round((img.naturalHeight / img.naturalWidth) * PREVIEW_WIDTH));
-              }
-            }}
-          />
+        <div>
+          {product.images.length > 1 && (
+            <div className="mb-3">
+              <Label>Foto donde va la personalización</Label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {product.images.map((image) => (
+                  <button
+                    key={image.id}
+                    type="button"
+                    onClick={() => setCustomizationImageId(image.id)}
+                    className={`h-16 w-16 overflow-hidden rounded border-2 ${
+                      image.id === customizationImageId ? 'border-primary' : 'border-transparent'
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={resolveImageUrl(image.url)} alt="" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div
+            className="relative overflow-hidden rounded-lg border border-border bg-muted"
+            style={{ width: PREVIEW_WIDTH, height: previewHeight }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={resolveImageUrl(coverImage.url)}
+              alt=""
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth > 0) {
+                  setPreviewHeight(Math.round((img.naturalHeight / img.naturalWidth) * PREVIEW_WIDTH));
+                }
+              }}
+            />
 
-          {enableName && (
-            <PrintAreaBox
-              label="Nombre"
-              colorClass="border-blue-500 bg-blue-500/20 text-blue-950"
-              box={pxFromArea(nameArea)}
-              onChange={(px) => setNameArea((a) => areaFromPx(px, a.rotation))}
-            />
-          )}
-          {enableNumber && (
-            <PrintAreaBox
-              label="Dorsal"
-              colorClass="border-emerald-500 bg-emerald-500/20 text-emerald-950"
-              box={pxFromArea(numberArea)}
-              onChange={(px) => setNumberArea((a) => areaFromPx(px, a.rotation))}
-            />
-          )}
-          {enablePatches && (
-            <PrintAreaBox
-              label="Parches"
-              colorClass="border-amber-500 bg-amber-500/20 text-amber-950"
-              box={pxFromArea(patchArea)}
-              onChange={(px) => setPatchArea((a) => areaFromPx(px, a.rotation))}
-            />
-          )}
+            {enableName && (
+              <PrintAreaBox
+                label="Nombre"
+                colorClass="border-blue-500 bg-blue-500/20 text-blue-950"
+                box={pxFromArea(nameArea)}
+                onChange={(px) => setNameArea((a) => areaFromPx(px, a.rotation))}
+              />
+            )}
+            {enableNumber && (
+              <PrintAreaBox
+                label="Dorsal"
+                colorClass="border-emerald-500 bg-emerald-500/20 text-emerald-950"
+                box={pxFromArea(numberArea)}
+                onChange={(px) => setNumberArea((a) => areaFromPx(px, a.rotation))}
+              />
+            )}
+            {enablePatches && (
+              <PrintAreaBox
+                label="Parches"
+                colorClass="border-amber-500 bg-amber-500/20 text-amber-950"
+                box={pxFromArea(patchArea)}
+                onChange={(px) => setPatchArea((a) => areaFromPx(px, a.rotation))}
+              />
+            )}
+          </div>
         </div>
 
         <div className="space-y-5">
@@ -222,6 +249,12 @@ export function ProductCustomizationEditor({
                 ))}
               </SelectContent>
             </Select>
+            {!fontId && (
+              <p className="text-xs text-amber-600">
+                Sin tipografía asignada el personalizador no se muestra en la tienda: elegí una para
+                que los clientes puedan poner nombre y dorsal.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

@@ -46,6 +46,17 @@ export class UploadsService {
     return { url: `/uploads/${folder}/${filename}` };
   }
 
+  /** Guarda un buffer ya generado (ej. el PNG de producción del personalizador). */
+  async storeGeneratedPng(buffer: Buffer, folder: string): Promise<StoredFile> {
+    const targetDir = join(UPLOADS_ROOT, folder);
+    await mkdir(targetDir, { recursive: true });
+
+    const filename = `${randomUUID()}.png`;
+    await writeFile(join(targetDir, filename), buffer);
+
+    return { url: `/uploads/${folder}/${filename}` };
+  }
+
   /** Guarda un archivo tal cual, sin procesarlo (usado para tipografías). */
   async storeRaw(file: Express.Multer.File | undefined, folder: string): Promise<StoredFile> {
     if (!file) {

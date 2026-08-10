@@ -14,6 +14,6 @@ import { TemplatesService } from './templates.service';
   imports: [UploadsModule],
   controllers: [FontsController, PatchesController, TemplatesController, RenderController],
   providers: [FontsService, PatchesService, TemplatesService, RenderService],
-  exports: [FontsService, PatchesService, TemplatesService],
+  exports: [FontsService, PatchesService, TemplatesService, RenderService],
 })
 export class CustomizationModule {}

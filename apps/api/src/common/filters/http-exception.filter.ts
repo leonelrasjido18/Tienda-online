@@ -7,6 +7,24 @@ interface ErrorBody {
   errors?: Record<string, string[]>;
 }
 
+function isMulterError(exception: unknown): exception is { code: string; message: string } {
+  return (
+    typeof exception === 'object' &&
+    exception !== null &&
+    (exception as { name?: string }).name === 'MulterError' &&
+    typeof (exception as { code?: unknown }).code === 'string'
+  );
+}
+
+function fromMulterError(exception: { code: string }): { status: number; body: ErrorBody } {
+  switch (exception.code) {
+    case 'LIMIT_FILE_SIZE':
+      return { status: HttpStatus.PAYLOAD_TOO_LARGE, body: { message: 'El archivo es demasiado pesado' } };
+    default:
+      return { status: HttpStatus.BAD_REQUEST, body: { message: 'No se pudo subir el archivo' } };
+  }
+}
+
 function fromPrismaError(exception: Prisma.PrismaClientKnownRequestError): { status: number; body: ErrorBody } {
   switch (exception.code) {
     case 'P2002': {
@@ -44,6 +62,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
       if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
         this.logger.error(exception);
       }
+      response.status(status).json({ statusCode: status, ...body });
+      return;
+    }
+
+    if (isMulterError(exception)) {
+      const { status, body } = fromMulterError(exception);
       response.status(status).json({ statusCode: status, ...body });
       return;
     }

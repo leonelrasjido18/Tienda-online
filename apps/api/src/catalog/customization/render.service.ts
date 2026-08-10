@@ -41,15 +41,10 @@ export class RenderService {
   async renderProductCustomization(productId: string, input: RenderCustomizationInput): Promise<Buffer> {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      include: { images: { orderBy: { position: 'asc' }, take: 1 } },
+      include: { images: { orderBy: { position: 'asc' } } },
     });
     if (!product) {
       throw new NotFoundException('El producto no existe');
-    }
-
-    const coverImage = product.images[0];
-    if (!coverImage) {
-      throw new BadRequestException('El producto no tiene fotos cargadas');
     }
 
     const customization = await this.templates.get(productId);
@@ -58,6 +53,12 @@ export class RenderService {
     }
     if (!customization.font) {
       throw new BadRequestException('El producto no tiene una tipografía asignada para personalizar');
+    }
+
+    const coverImage =
+      product.images.find((image) => image.id === customization.customizationImageId) ?? product.images[0];
+    if (!coverImage) {
+      throw new BadRequestException('El producto no tiene fotos cargadas');
     }
 
     const backgroundPath = resolveUploadPath(coverImage.url);

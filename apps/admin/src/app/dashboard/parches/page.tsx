@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 
 import { ApiError } from '@/lib/api';
+import { resolveImageUrl } from '@/lib/media';
 import { useApi } from '@/lib/use-api';
 
 interface PatchFormState {
@@ -152,7 +153,7 @@ export default function PatchesPage() {
                 <TableCell>
                   <div className="flex items-center gap-3">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={patch.imageUrl} alt="" className="h-8 w-8 rounded object-contain" />
+                    <img src={resolveImageUrl(patch.imageUrl)} alt="" className="h-8 w-8 rounded object-contain" />
                     <span>{patch.name}</span>
                   </div>
                 </TableCell>
@@ -226,7 +227,7 @@ export default function PatchesPage() {
                 </Button>
                 {form.imageUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={form.imageUrl} alt="" className="h-10 w-10 rounded object-contain" />
+                  <img src={resolveImageUrl(form.imageUrl)} alt="" className="h-10 w-10 rounded object-contain" />
                 )}
               </div>
             </div>

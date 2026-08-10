@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { resolveImageUrl } from '@/lib/media';
 import { useApi } from '@/lib/use-api';
 
 interface AdminProductListItem {
@@ -97,7 +98,7 @@ export default function ProductsPage() {
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted text-xs text-muted-foreground">
                       {product.coverImageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={product.coverImageUrl} alt="" className="h-full w-full object-cover" />
+                        <img src={resolveImageUrl(product.coverImageUrl)} alt="" className="h-full w-full object-cover" />
                       ) : (
                         'Sin foto'
                       )}
