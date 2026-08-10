@@ -3,7 +3,9 @@ import { upsertCustomizationTemplateSchema, type UpsertCustomizationTemplateInpu
 
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { TemplatesService } from './templates.service';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
+@Roles('OWNER', 'STAFF')
 @Controller('admin/products/:productId/customization')
 export class TemplatesController {
   constructor(private readonly templates: TemplatesService) {}

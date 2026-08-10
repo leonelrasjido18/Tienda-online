@@ -3,7 +3,9 @@ import { upsertLeagueSchema, type UpsertLeagueInput } from '@tienda/shared';
 
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { LeaguesService } from './leagues.service';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
+@Roles('OWNER', 'STAFF')
 @Controller('admin/leagues')
 export class LeaguesController {
   constructor(private readonly leagues: LeaguesService) {}

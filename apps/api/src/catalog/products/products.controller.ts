@@ -32,6 +32,7 @@ import { z } from 'zod';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { UploadsService } from '../uploads/uploads.service';
 import { ProductsService } from './products.service';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
 const adminListQuerySchema = z.object({
   status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional(),
@@ -40,6 +41,7 @@ const adminListQuerySchema = z.object({
   perPage: z.coerce.number().int().positive().max(100).default(24),
 });
 
+@Roles('OWNER', 'STAFF')
 @Controller('admin/products')
 export class ProductsController {
   constructor(

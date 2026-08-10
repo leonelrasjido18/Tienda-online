@@ -3,7 +3,9 @@ import { upsertSeasonSchema, type UpsertSeasonInput } from '@tienda/shared';
 
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { SeasonsService } from './seasons.service';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
+@Roles('OWNER', 'STAFF')
 @Controller('admin/seasons')
 export class SeasonsController {
   constructor(private readonly seasons: SeasonsService) {}

@@ -3,7 +3,9 @@ import { upsertTeamSchema, type UpsertTeamInput } from '@tienda/shared';
 
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { TeamsService } from './teams.service';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
+@Roles('OWNER', 'STAFF')
 @Controller('admin/teams')
 export class TeamsController {
   constructor(private readonly teams: TeamsService) {}

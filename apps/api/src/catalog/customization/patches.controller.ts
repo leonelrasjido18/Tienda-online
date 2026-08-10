@@ -5,7 +5,9 @@ import { upsertPatchSchema, type UpsertPatchInput } from '@tienda/shared';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { UploadsService } from '../uploads/uploads.service';
 import { PatchesService } from './patches.service';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
+@Roles('OWNER', 'STAFF')
 @Controller('admin/patches')
 export class PatchesController {
   constructor(

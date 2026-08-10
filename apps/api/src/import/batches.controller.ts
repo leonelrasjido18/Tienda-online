@@ -15,7 +15,9 @@ import {
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { BalanceService } from './balance.service';
 import { BatchesService } from './batches.service';
+import { Roles } from '../auth/decorators/roles.decorator';
 
+@Roles('OWNER', 'STAFF')
 @Controller('admin/batches')
 export class BatchesController {
   constructor(
@@ -69,6 +71,8 @@ export class BatchesController {
   }
 
   /** Marca manual del saldo (transferencia recibida por fuera del sistema). */
+  // Marcar un saldo como cobrado a mano: sólo la dueña.
+  @Roles('OWNER')
   @Post('orders/:orderId/mark-balance-paid')
   @UsePipes(new ZodValidationPipe(markBalancePaidSchema))
   markBalancePaid(@Param('orderId') orderId: string, @Body() body: MarkBalancePaidInput) {

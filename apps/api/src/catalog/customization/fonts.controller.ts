@@ -17,7 +17,9 @@ import { upsertLeagueFontSchema, type UpsertLeagueFontInput } from '@tienda/shar
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { UploadsService } from '../uploads/uploads.service';
 import { FontsService } from './fonts.service';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
+@Roles('OWNER', 'STAFF')
 @Controller('admin/fonts')
 export class FontsController {
   constructor(

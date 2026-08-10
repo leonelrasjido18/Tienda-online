@@ -3,7 +3,9 @@ import { upsertBrandSchema, type UpsertBrandInput } from '@tienda/shared';
 
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { BrandsService } from './brands.service';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
+@Roles('OWNER', 'STAFF')
 @Controller('admin/brands')
 export class BrandsController {
   constructor(private readonly brands: BrandsService) {}

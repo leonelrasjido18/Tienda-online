@@ -1,9 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Put, UsePipes } from '@nestjs/common';
 import { upsertShippingRateSchema, type UpsertShippingRateInput } from '@tienda/shared';
 
+import { Roles } from '../auth/decorators/roles.decorator';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { ShippingService } from './shipping.service';
 
+// Las tarifas de envío se le cobran al cliente: sólo las toca la dueña.
+@Roles('OWNER')
 @Controller('admin/shipping/rates')
 export class ShippingController {
   constructor(private readonly shipping: ShippingService) {}

@@ -4,7 +4,9 @@ import type { Request } from 'express';
 
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PushService } from './push.service';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
+@Roles('OWNER', 'STAFF')
 @Controller('admin/push')
 export class PushController {
   constructor(private readonly push: PushService) {}
