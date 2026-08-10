@@ -1,0 +1,41 @@
+import type { StoreSettingsDto } from '@tienda/shared';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+/**
+ * Wrapper seguro sobre fetch: si la API falla devuelve null en vez de tirar.
+ * Para Server Components que no deben tumbar la página por un error de API.
+ */
+export async function apiFetchSafe<T>(path: string, init?: RequestInit): Promise<T | null> {
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+const DEFAULT_SETTINGS: StoreSettingsDto = {
+  defaultDepositPercent: 50,
+  bankTransferInstructions: null,
+  whatsappPhone: null,
+  whatsappMessage: null,
+  instagramUser: null,
+  contactEmail: null,
+  pickupAddress: null,
+  openingHours: null,
+};
+
+/**
+ * Obtener los settings de la tienda con fallback seguro.
+ * Nunca devuelve null: si la API falla, devuelve defaults.
+ */
+export async function getStoreSettings(): Promise<StoreSettingsDto> {
+  const data = await apiFetchSafe<StoreSettingsDto>('/settings');
+  return data ?? DEFAULT_SETTINGS;
+}

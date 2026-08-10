@@ -1,6 +1,8 @@
 import { formatCentsAsArs, type ProductListItemDto } from '@tienda/shared';
 import Link from 'next/link';
 
+import { resolveImageUrl } from '@/lib/media';
+
 export function ProductCard({ product }: { product: ProductListItemDto }) {
   const isPreorderOnly = product.fulfillmentMode === 'PREORDER' || product.totalAvailable === 0;
 
@@ -13,7 +15,7 @@ export function ProductCard({ product }: { product: ProductListItemDto }) {
         {product.coverImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={product.coverImageUrl}
+            src={resolveImageUrl(product.coverImageUrl)}
             alt={product.name}
             className="h-full w-full object-cover transition-transform group-hover:scale-105"
           />
