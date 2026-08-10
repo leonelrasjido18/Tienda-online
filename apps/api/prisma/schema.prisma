@@ -50,14 +50,14 @@ model RefreshToken {
 }
 
 model AuditLog {
-  id          String    @id @default(uuid())
+  id          String     @id @default(uuid())
   staffUserId String?
   staffUser   StaffUser? @relation(fields: [staffUserId], references: [id], onDelete: SetNull)
   action      String
   entityType  String
   entityId    String?
   metadata    Json?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime   @default(now())
 
   @@index([entityType, entityId])
   @@map("audit_logs")
@@ -191,15 +191,15 @@ model ProductCollection {
 }
 
 model SizeGuide {
-  id          String     @id @default(uuid())
+  id          String    @id @default(uuid())
   name        String
   leagueId    String?
-  league      League?    @relation(fields: [leagueId], references: [id], onDelete: SetNull)
+  league      League?   @relation(fields: [leagueId], references: [id], onDelete: SetNull)
   categoryId  String?
-  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  contentHtml String     @db.Text
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  contentHtml String    @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   products Product[]
 
@@ -294,6 +294,8 @@ model ProductVariant {
   optionValues VariantOptionValue[]
   inventory    InventoryItem?
   movements    StockMovement[]
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
 
   @@index([productId])
   @@map("product_variants")
@@ -319,6 +321,8 @@ model ProductImage {
   alt           String?
   position      Int                 @default(0)
   createdAt     DateTime            @default(now())
+
+  customizationTemplates CustomizationTemplate[]
 
   @@index([productId])
   @@index([optionValueId])
@@ -400,24 +404,26 @@ model PatchLeague {
 }
 
 model CustomizationTemplate {
-  id               String      @id @default(uuid())
-  productId        String      @unique
-  product          Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  enableName       Boolean     @default(true)
-  enableNumber     Boolean     @default(true)
-  enablePatches    Boolean     @default(false)
-  maxNameLength    Int         @default(12)
-  minNumber        Int         @default(1)
-  maxNumber        Int         @default(99)
-  nameExtraCents   Int         @default(0)
-  numberExtraCents Int         @default(0)
-  fontId           String?
-  font             LeagueFont? @relation(fields: [fontId], references: [id], onDelete: SetNull)
-  namePrintArea    Json
-  numberPrintArea  Json
-  patchPrintArea   Json?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  id                   String        @id @default(uuid())
+  productId            String        @unique
+  product              Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  enableName           Boolean       @default(true)
+  enableNumber         Boolean       @default(true)
+  enablePatches        Boolean       @default(false)
+  maxNameLength        Int           @default(12)
+  minNumber            Int           @default(1)
+  maxNumber            Int           @default(99)
+  nameExtraCents       Int           @default(0)
+  numberExtraCents     Int           @default(0)
+  fontId               String?
+  font                 LeagueFont?   @relation(fields: [fontId], references: [id], onDelete: SetNull)
+  customizationImageId String?
+  customizationImage   ProductImage? @relation(fields: [customizationImageId], references: [id], onDelete: SetNull)
+  namePrintArea        Json
+  numberPrintArea      Json
+  patchPrintArea       Json?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   patchOptions ProductCustomizationOption[]
 
@@ -425,12 +431,370 @@ model CustomizationTemplate {
 }
 
 model ProductCustomizationOption {
-  id         String                 @id @default(uuid())
+  id         String                @id @default(uuid())
   templateId String
-  template   CustomizationTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template   CustomizationTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   patchId    String
-  patch      Patch                  @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  patch      Patch                 @relation(fields: [patchId], references: [id], onDelete: Cascade)
 
   @@unique([templateId, patchId])
   @@map("product_customization_options")
+}
+
+// ---------------------------------------------------------------------------
+// Ventas: carrito, checkout, pagos en dos etapas (Fase 3)
+// ---------------------------------------------------------------------------
+
+enum PaymentPlan {
+  FULL
+  DEPOSIT_BALANCE
+}
+
+enum OrderFinancialStatus {
+  PENDING
+  DEPOSIT_PAID
+  AWAITING_BALANCE
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  FAILED
+  EXPIRED
+}
+
+enum OrderFulfillmentStatus {
+  UNFULFILLED
+  AWAITING_IMPORT
+  READY
+  FULFILLED
+  CANCELLED
+}
+
+enum PaymentKind {
+  DEPOSIT
+  BALANCE
+  FULL
+  REFUND
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REFUNDED
+  CANCELLED
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  carts  Cart[]
+  orders Order[]
+
+  @@map("customers")
+}
+
+model Cart {
+  id           String    @id @default(uuid())
+  sessionToken String    @unique
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  expiresAt    DateTime
+
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id                 String         @id @default(uuid())
+  cartId             String
+  cart               Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variantId          String
+  variant            ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity           Int
+  priceCentsAtAdd    Int
+  customizationDraft Json?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+model Order {
+  id     String @id @default(uuid())
+  number Int    @unique @default(autoincrement())
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  contactName  String
+  contactEmail String
+  contactPhone String?
+
+  pickupInStore      Boolean @default(false)
+  shippingStreet     String?
+  shippingNumber     String?
+  shippingFloor      String?
+  shippingCity       String?
+  shippingProvince   String?
+  shippingPostalCode String?
+  shippingNotes      String?
+
+  paymentPlan       PaymentPlan            @default(FULL)
+  financialStatus   OrderFinancialStatus   @default(PENDING)
+  fulfillmentStatus OrderFulfillmentStatus @default(UNFULFILLED)
+
+  subtotalCents Int
+  depositCents  Int?
+  balanceCents  Int?
+  shippingCents Int?
+  totalCents    Int
+
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  notes     String?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  items        OrderItem[]
+  events       OrderEvent[]
+  payments     Payment[]
+  paymentLinks PaymentLink[]
+
+  @@index([financialStatus])
+  @@index([customerId])
+  @@index([importBatchId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String          @id @default(uuid())
+  orderId   String
+  order     Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  productName  String
+  variantSku   String
+  optionsLabel String?
+  imageUrl     String?
+
+  unitPriceCents  Int
+  quantity        Int
+  totalCents      Int
+  fulfillmentMode FulfillmentMode
+
+  customization OrderItemCustomization?
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderItemCustomization {
+  id          String    @id @default(uuid())
+  orderItemId String    @unique
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  playerName         String?
+  playerNumber       Int?
+  fontId             String?
+  patchIds           Json
+  extraCents         Int
+  previewImageUrl    String?
+  productionImageUrl String?
+
+  @@map("order_item_customizations")
+}
+
+model OrderEvent {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type      String
+  message   String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@map("order_events")
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  orderId           String
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind              PaymentKind
+  provider          String
+  providerPaymentId String?
+  amountCents       Int
+  status            PaymentStatus @default(PENDING)
+  rawPayload        Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  provider    String
+  eventId     String
+  payload     Json
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([provider, eventId])
+  @@map("webhook_events")
+}
+
+model StoreSettings {
+  id                       Int      @id @default(1)
+  defaultDepositPercent    Int      @default(50)
+  bankTransferInstructions String?  @db.Text
+  whatsappPhone            String?
+  whatsappMessage          String?
+  instagramUser            String?
+  contactEmail             String?
+  pickupAddress            String?  @db.Text
+  openingHours             String?
+  updatedAt                DateTime @updatedAt
+
+  @@map("store_settings")
+}
+
+model PushSubscription {
+  id         String   @id @default(uuid())
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @updatedAt
+
+  @@map("push_subscriptions")
+}
+
+// ---------------------------------------------------------------------------
+// Importación y cobro del saldo (Fase 4)
+// ---------------------------------------------------------------------------
+
+enum ImportBatchStatus {
+  OPEN
+  ORDERED
+  IN_TRANSIT
+  CUSTOMS
+  RECEIVED
+  CLOSED
+}
+
+/// Lote de importación: agrupa los pedidos por encargo que viajan juntos desde China.
+model ImportBatch {
+  id       String            @id @default(uuid())
+  code     String            @unique
+  supplier String?
+  status   ImportBatchStatus @default(OPEN)
+
+  /// Fecha tope para sumar pedidos nuevos a este lote.
+  closesAt    DateTime?
+  /// Llegada estimada. Se comunica al cliente como rango, nunca como fecha exacta.
+  etaDate     DateTime?
+  trackingRef String?
+
+  /// Costos de importación del lote completo, para calcular rentabilidad.
+  freightCents  Int?
+  customsCents  Int?
+  otherfeeCents Int?
+
+  notes      String?   @db.Text
+  receivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  orders Order[]
+  events ImportBatchEvent[]
+
+  @@index([status])
+  @@map("import_batches")
+}
+
+model ImportBatchEvent {
+  id        String      @id @default(uuid())
+  batchId   String
+  batch     ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  type      String
+  message   String?
+  createdAt DateTime    @default(now())
+
+  @@index([batchId])
+  @@map("import_batch_events")
+}
+
+enum PaymentLinkStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+/// Link de cobro del saldo. El cliente entra con el token, ve su pedido y paga
+/// saldo + envío. Se genera automáticamente al marcar el lote como RECEIVED.
+model PaymentLink {
+  id      String @id @default(uuid())
+  /// Token público, va en la URL. Se busca por acá, nunca por id.
+  token   String @unique
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// Desglose congelado al momento de generar el link.
+  balanceCents  Int
+  shippingCents Int
+  amountCents   Int
+
+  status    PaymentLinkStatus @default(PENDING)
+  expiresAt DateTime
+
+  /// Preferencia de Mercado Pago asociada, para reusarla si el cliente vuelve.
+  providerPreferenceId String?
+
+  /// Control de recordatorios: cuántos se mandaron y cuándo fue el último.
+  remindersSent  Int       @default(0)
+  lastRemindedAt DateTime?
+
+  paidAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+  @@map("payment_links")
+}
+
+/// Tarifa de envío manual por provincia. Es el fallback que funciona sin depender
+/// de ninguna API externa; el proveedor de Andreani se enchufa detrás de la misma
+/// interfaz ShippingProvider cuando haya credenciales.
+model ShippingRate {
+  id         String  @id @default(uuid())
+  /// Nombre de provincia tal como se guarda en Order.shippingProvince.
+  province   String  @unique
+  /// Costo base del envío a esa provincia.
+  priceCents Int
+  /// Días hábiles estimados de entrega, para comunicarle al cliente.
+  etaDays    Int?
+  isActive   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("shipping_rates")
 }

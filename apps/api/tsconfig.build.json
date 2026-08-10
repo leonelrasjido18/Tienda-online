@@ -1,4 +1,9 @@
 {
   "extends": "./tsconfig.json",
+  // El tsconfig base incluye `prisma/` y los configs de vitest para que el editor y
+  // el typecheck los cubran. En el build eso hacía que TypeScript infiriera la raíz
+  // en la carpeta de la app y emitiera `dist/src/main.js`, con lo cual el script
+  // `start` ("node dist/main.js") fallaba en producción. Acá se acota sólo a `src`.
+  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
 }
