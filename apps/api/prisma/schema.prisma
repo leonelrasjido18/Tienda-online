@@ -570,6 +570,7 @@ model Order {
   events       OrderEvent[]
   payments     Payment[]
   paymentLinks PaymentLink[]
+  shipment     Shipment?
 
   @@index([financialStatus])
   @@index([customerId])
@@ -797,4 +798,20 @@ model ShippingRate {
   updatedAt DateTime @updatedAt
 
   @@map("shipping_rates")
+}
+
+model Shipment {
+  id             String    @id @default(uuid())
+  orderId        String    @unique
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider       String
+  trackingNumber String
+  labelUrl       String?
+  status         String    @default("PREPARING")
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("shipments")
 }

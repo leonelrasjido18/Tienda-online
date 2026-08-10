@@ -152,6 +152,33 @@ export class UalaService implements PaymentProvider {
     };
   }
 
+  async refund(providerPaymentId: string, amountCents: number): Promise<{ providerRefundId: string; status: PaymentStatus }> {
+    const token = await this.getToken();
+    const res = await fetch(`${this.urls.checkout}/orders/${providerPaymentId}/refund`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      body: JSON.stringify({
+        amount: (amountCents / 100).toFixed(2),
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      this.logger.error(`Ualá rechazó el reembolso de ${providerPaymentId} (${res.status}): ${detail}`);
+      throw new BadRequestException('No se pudo procesar el reembolso con Ualá.');
+    }
+
+    const body = (await res.json()) as { id?: string; status?: string; uuid?: string };
+    return {
+      providerRefundId: body.id ?? body.uuid ?? providerPaymentId,
+      status: 'APPROVED',
+    };
+  }
+
   private async fetchOrder(uuid: string): Promise<UalaOrderResponse> {
     const token = await this.getToken();
     const res = await fetch(`${this.urls.checkout}/orders/${uuid}`, {

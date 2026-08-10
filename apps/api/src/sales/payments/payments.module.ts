@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { OrdersModule } from '../orders/orders.module';
 import { MercadoPagoService } from './mercadopago.service';
@@ -7,7 +7,7 @@ import { PaymentsController } from './payments.controller';
 import { UalaService } from './uala.service';
 
 @Module({
-  imports: [OrdersModule],
+  imports: [forwardRef(() => OrdersModule)],
   controllers: [PaymentsController],
   providers: [MercadoPagoService, UalaService, PaymentProviderRegistry],
   exports: [PaymentProviderRegistry],

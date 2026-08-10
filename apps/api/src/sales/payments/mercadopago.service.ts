@@ -5,6 +5,7 @@ import {
   InvalidWebhookSignatureError,
   MercadoPagoConfig,
   Payment,
+  PaymentRefund,
   Preference,
   WebhookSignatureValidator,
 } from 'mercadopago';
@@ -141,6 +142,32 @@ export class MercadoPagoService implements PaymentProvider {
   async getPayment(paymentId: string) {
     const payment = new Payment(this.requireClient());
     return payment.get({ id: paymentId });
+  }
+
+  async refund(providerPaymentId: string, amountCents: number): Promise<{ providerRefundId: string; status: PaymentStatus }> {
+    const refund = new PaymentRefund(this.requireClient());
+    try {
+      const result = await refund.create({
+        payment_id: providerPaymentId,
+        body: {
+          amount: amountCents / 100,
+        },
+      });
+
+      if (!result.id) {
+        throw new BadRequestException('Mercado Pago no devolvió un ID de reembolso válido');
+      }
+
+      return {
+        providerRefundId: String(result.id),
+        status: 'APPROVED',
+      };
+    } catch (error) {
+      this.requireClient(); // ensures it throws if not configured
+      throw new BadRequestException(
+        `Error al reembolsar con Mercado Pago: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   verifySignature(headers: { xSignature?: string; xRequestId?: string }, dataId: string) {

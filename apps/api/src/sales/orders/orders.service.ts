@@ -1,28 +1,32 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import {
+  formatCentsAsArs,
   formatOrderNumber,
   type OrderDetailDto,
   type OrderFinancialStatus,
   type OrderSummaryDto,
   type PaymentStatus as PaymentStatusValue,
 } from '@tienda/shared';
-import type { Order, OrderEvent, OrderItem, OrderItemCustomization, Payment, Prisma } from '@prisma/client';
+import type { Order, OrderEvent, OrderItem, OrderItemCustomization, Payment, Prisma, Shipment } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../notifications/mail.service';
 import { PushService } from '../notifications/push.service';
 import { StockReservationService } from '../stock/stock-reservation.service';
+import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 
 const ORDER_DETAIL_INCLUDE = {
   items: { include: { customization: true } },
   events: { orderBy: { createdAt: 'asc' as const } },
   payments: { orderBy: { createdAt: 'asc' as const } },
+  shipment: true,
 } satisfies Prisma.OrderInclude;
 
 type OrderWithRelations = Order & {
   items: (OrderItem & { customization: OrderItemCustomization | null })[];
   events: OrderEvent[];
   payments: Payment[];
+  shipment: Shipment | null;
 };
 
 export interface AdminOrderListQuery {
@@ -39,6 +43,8 @@ export class OrdersService {
     private readonly stock: StockReservationService,
     private readonly mail: MailService,
     private readonly push: PushService,
+    @Inject(forwardRef(() => PaymentProviderRegistry))
+    private readonly paymentRegistry: PaymentProviderRegistry,
   ) {}
 
   async list(query: AdminOrderListQuery): Promise<{ items: OrderSummaryDto[]; total: number }> {
@@ -89,6 +95,256 @@ export class OrdersService {
     }
 
     await this.applyApprovedPayment(payment.id, { provider: 'bank_transfer' });
+    return this.detail(orderId);
+  }
+
+  async cancel(orderId: string, reason?: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order) {
+      throw new NotFoundException('El pedido no existe');
+    }
+    if (order.fulfillmentStatus === 'CANCELLED') {
+      throw new BadRequestException('El pedido ya está cancelado');
+    }
+    if (order.fulfillmentStatus === 'FULFILLED') {
+      throw new BadRequestException('No se puede cancelar un pedido ya despachado');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const inStockLines = order.items
+        .filter((item) => item.fulfillmentMode === 'IN_STOCK' && item.variantId)
+        .map((item) => ({ variantId: item.variantId as string, quantity: item.quantity }));
+
+      if (order.financialStatus === 'PENDING') {
+        await this.stock.release(tx, inStockLines);
+      } else if (['DEPOSIT_PAID', 'AWAITING_BALANCE', 'PAID'].includes(order.financialStatus)) {
+        await this.stock.returnStock(tx, inStockLines);
+      }
+
+      const finalFinancialStatus = ['DEPOSIT_PAID', 'AWAITING_BALANCE', 'PAID'].includes(order.financialStatus)
+        ? 'REFUNDED'
+        : order.financialStatus;
+
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          fulfillmentStatus: 'CANCELLED',
+          financialStatus: finalFinancialStatus,
+          expiresAt: null,
+        },
+      });
+
+      await tx.paymentLink.updateMany({
+        where: { orderId, status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId,
+          type: 'cancelled',
+          message: `Pedido cancelado. Motivo: ${reason ?? 'No especificado'}`,
+        },
+      });
+    });
+
+    return this.detail(orderId);
+  }
+
+  async refund(orderId: string, input: { amountCents: number; reason?: string }) {
+    const { amountCents, reason } = input;
+    if (amountCents <= 0) {
+      throw new BadRequestException('El monto a reembolsar debe ser mayor a cero');
+    }
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { payments: true },
+    });
+    if (!order) {
+      throw new NotFoundException('El pedido no existe');
+    }
+
+    const approvedPayments = order.payments.filter(
+      (p) => p.status === 'APPROVED' && ['FULL', 'DEPOSIT', 'BALANCE'].includes(p.kind),
+    );
+    if (approvedPayments.length === 0) {
+      throw new BadRequestException('El pedido no tiene pagos aprobados para reembolsar');
+    }
+
+    // Buscamos un pago que no sea de transferencia bancaria si es posible, o usamos el más reciente.
+    const payablePayment = approvedPayments.find((p) => p.provider !== 'bank_transfer') ?? approvedPayments[0];
+    if (!payablePayment) {
+      throw new BadRequestException('El pedido no tiene pagos aprobados para reembolsar');
+    }
+
+    let providerRefundId: string | null = null;
+
+    if (payablePayment.provider !== 'bank_transfer' && payablePayment.providerPaymentId) {
+      const provider = this.paymentRegistry.byName(payablePayment.provider);
+      if (provider && provider.refund) {
+        try {
+          const res = await provider.refund(payablePayment.providerPaymentId, amountCents);
+          providerRefundId = res.providerRefundId;
+        } catch (error) {
+          throw new BadRequestException(
+            `Error al reembolsar con el proveedor: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Reconsultar pagos aprobados y reembolsos dentro de la transacción
+      const allPayments = await tx.payment.findMany({
+        where: { orderId, status: 'APPROVED' },
+      });
+
+      const totalApproved = allPayments
+        .filter((p) => ['FULL', 'DEPOSIT', 'BALANCE'].includes(p.kind))
+        .reduce((sum, p) => sum + p.amountCents, 0);
+
+      const totalRefunded = allPayments
+        .filter((p) => p.kind === 'REFUND')
+        .reduce((sum, p) => sum + Math.abs(p.amountCents), 0);
+
+      if (totalRefunded + amountCents > totalApproved) {
+        throw new BadRequestException(
+          `El reembolso de ${formatCentsAsArs(amountCents)} excede el saldo reembolsable disponible de ${formatCentsAsArs(totalApproved - totalRefunded)}`,
+        );
+      }
+
+      await tx.payment.create({
+        data: {
+          orderId,
+          kind: 'REFUND',
+          provider: payablePayment.provider,
+          providerPaymentId: providerRefundId,
+          amountCents: -amountCents,
+          status: 'APPROVED',
+          rawPayload: { reason: reason ?? null } as any,
+        },
+      });
+
+      const newTotalRefunded = totalRefunded + amountCents;
+      const newFinancialStatus = newTotalRefunded >= totalApproved ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          financialStatus: newFinancialStatus,
+        },
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId,
+          type: 'refunded',
+          message: `Reembolso de ${formatCentsAsArs(amountCents)} procesado vía ${payablePayment.provider}. Motivo: ${reason ?? 'No especificado'}`,
+        },
+      });
+
+      return this.toDetailDto(
+        await tx.order.findUniqueOrThrow({
+          where: { id: orderId },
+          include: ORDER_DETAIL_INCLUDE,
+        }) as any
+      );
+    });
+  }
+
+  async createShipment(orderId: string, input: any) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { shipment: true },
+    });
+    if (!order) {
+      throw new NotFoundException('El pedido no existe');
+    }
+    if (order.shipment) {
+      throw new BadRequestException('El pedido ya tiene un envío registrado');
+    }
+    if (order.fulfillmentStatus === 'CANCELLED') {
+      throw new BadRequestException('No se puede despachar un pedido cancelado');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.shipment.create({
+        data: {
+          orderId,
+          provider: input.provider,
+          trackingNumber: input.trackingNumber,
+          labelUrl: input.labelUrl ?? null,
+          status: 'SHIPPED',
+          shippedAt: new Date(),
+        },
+      });
+
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          fulfillmentStatus: 'FULFILLED',
+        },
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId,
+          type: 'shipped',
+          message: `Pedido despachado vía ${input.provider}. Código de seguimiento: ${input.trackingNumber}`,
+        },
+      });
+    });
+
+    // Enviar email de despacho
+    await this.mail.sendShipmentNotification({
+      contactName: order.contactName,
+      contactEmail: order.contactEmail,
+      number: order.number,
+      provider: input.provider,
+      trackingNumber: input.trackingNumber,
+    });
+
+    return this.detail(orderId);
+  }
+
+  async updateShipment(orderId: string, input: any) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { shipment: true },
+    });
+    if (!order || !order.shipment) {
+      throw new NotFoundException('El envío no existe para este pedido');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const data: Prisma.ShipmentUpdateInput = {
+        status: input.status,
+      };
+      if (input.trackingNumber) {
+        data.trackingNumber = input.trackingNumber;
+      }
+      if (input.status === 'DELIVERED') {
+        data.deliveredAt = new Date();
+      }
+
+      await tx.shipment.update({
+        where: { orderId },
+        data,
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId,
+          type: `shipment_${input.status.toLowerCase()}`,
+          message: `Estado del envío actualizado a: ${input.status}`,
+        },
+      });
+    });
+
     return this.detail(orderId);
   }
 
@@ -270,6 +526,20 @@ export class OrdersService {
         status: payment.status,
         createdAt: payment.createdAt.toISOString(),
       })),
+      shipment: order.shipment
+        ? {
+            id: order.shipment.id,
+            orderId: order.shipment.orderId,
+            provider: order.shipment.provider,
+            trackingNumber: order.shipment.trackingNumber,
+            labelUrl: order.shipment.labelUrl,
+            status: order.shipment.status as any,
+            shippedAt: order.shipment.shippedAt?.toISOString() ?? null,
+            deliveredAt: order.shipment.deliveredAt?.toISOString() ?? null,
+            createdAt: order.shipment.createdAt.toISOString(),
+            updatedAt: order.shipment.updatedAt.toISOString(),
+          }
+        : null,
     };
   }
 }

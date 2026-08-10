@@ -253,9 +253,57 @@ async function seedCustomization(productId: string, leagueId: string) {
   });
 }
 
+async function seedStoreSettings() {
+  const existing = await prisma.storeSettings.findUnique({
+    where: { id: 1 },
+  });
+  if (existing) return;
+
+  await prisma.storeSettings.create({
+    data: {
+      id: 1,
+      defaultDepositPercent: 50,
+      bankTransferInstructions: 'CBU: 0000000000000000000000\nAlias: remeras.del.area\nBanco: Galicia\nPor favor enviar el comprobante de pago por WhatsApp.',
+      whatsappPhone: '+5491100000000',
+      whatsappMessage: 'Hola! Quiero enviar el comprobante de pago de mi pedido',
+      instagramUser: 'remerasdelarea',
+      contactEmail: 'contacto@remerasdelarea.com.ar',
+      pickupAddress: 'Av. Corrientes 1234, CABA',
+      openingHours: 'Lunes a Viernes de 10 a 18 hs',
+    },
+  });
+  console.log('Configuración de la tienda sembrada.');
+}
+
+async function seedShippingRates() {
+  const provinces = [
+    { province: 'CABA', priceCents: 350000, etaDays: 2 },
+    { province: 'Buenos Aires', priceCents: 450000, etaDays: 4 },
+    { province: 'Córdoba', priceCents: 550000, etaDays: 5 },
+    { province: 'Santa Fe', priceCents: 550000, etaDays: 5 },
+    { province: 'Mendoza', priceCents: 600000, etaDays: 6 },
+  ];
+
+  for (const rate of provinces) {
+    await prisma.shippingRate.upsert({
+      where: { province: rate.province },
+      update: {},
+      create: {
+        province: rate.province,
+        priceCents: rate.priceCents,
+        etaDays: rate.etaDays,
+        isActive: true,
+      },
+    });
+  }
+  console.log('Tarifas de envío por provincia sembradas.');
+}
+
 async function main() {
   await seedOwner();
   await seedCatalog();
+  await seedStoreSettings();
+  await seedShippingRates();
 }
 
 main()

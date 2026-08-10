@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { FULFILLMENT_MODES } from '../catalog/product.schema';
+import { shipmentDtoSchema } from '../shipping/shipping.schema';
 
 export const ORDER_FINANCIAL_STATUSES = [
   'PENDING',
@@ -164,6 +165,7 @@ export const orderDetailSchema = orderSummarySchema.extend({
   items: z.array(orderItemDtoSchema),
   events: z.array(orderEventDtoSchema),
   payments: z.array(orderPaymentDtoSchema),
+  shipment: shipmentDtoSchema.nullable(),
 });
 export type OrderDetailDto = z.infer<typeof orderDetailSchema>;
 

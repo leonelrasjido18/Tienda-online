@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ORDER_FINANCIAL_STATUSES } from '@tienda/shared';
 import { z } from 'zod';
 
@@ -29,5 +29,25 @@ export class AdminOrdersController {
   @Post(':id/payments/:paymentId/approve-transfer')
   approveTransfer(@Param('id') id: string, @Param('paymentId') paymentId: string) {
     return this.orders.approveBankTransfer(id, paymentId);
+  }
+
+  @Post(':id/cancel')
+  cancel(@Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.orders.cancel(id, body.reason);
+  }
+
+  @Post(':id/refund')
+  refund(@Param('id') id: string, @Body() body: { amountCents: number; reason?: string }) {
+    return this.orders.refund(id, body);
+  }
+
+  @Post(':id/shipment')
+  createShipment(@Param('id') id: string, @Body() body: { provider: string; trackingNumber: string; labelUrl?: string }) {
+    return this.orders.createShipment(id, body);
+  }
+
+  @Patch(':id/shipment')
+  updateShipment(@Param('id') id: string, @Body() body: { status: string; trackingNumber?: string }) {
+    return this.orders.updateShipment(id, body);
   }
 }

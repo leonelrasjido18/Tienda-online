@@ -98,6 +98,97 @@ export class AndreaniShippingProvider implements ShippingProvider {
     }
   }
 
+  async createLabel(orderId: string, address: {
+    street: string;
+    number: string | null;
+    floor: string | null;
+    city: string;
+    province: string;
+    postalCode: string;
+    contactName: string;
+    contactPhone: string | null;
+    contactEmail: string;
+  }): Promise<{ trackingNumber: string; labelUrl: string }> {
+    const creds = this.credentials;
+    if (!creds) {
+      throw new Error('Andreani no está configurado');
+    }
+    const token = await this.getToken(creds.user, creds.password);
+    const body = {
+      contrato: creds.contrato,
+      cliente: creds.cliente,
+      destinatario: {
+        nombre: address.contactName,
+        email: address.contactEmail,
+        telefono: address.contactPhone ?? '',
+      },
+      direccion: {
+        calle: address.street,
+        numero: address.number ?? '',
+        piso: address.floor ?? '',
+        localidad: address.city,
+        provincia: address.province,
+        codigoPostal: address.postalCode,
+      },
+    };
+
+    const res = await fetch(`${ANDREANI_BASE_URL}/v1/ordenes-de-envio`, {
+      method: 'POST',
+      headers: {
+        'x-authorization-token': token,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Andreani rechazó la orden de envío: ${res.status}`);
+    }
+
+    const resBody = await res.json() as any;
+    const trackingNumber = resBody.numeroEnvio || resBody.trackingNumber;
+    const labelUrl = resBody.bultos?.[0]?.linkPdf || resBody.labelUrl;
+
+    if (!trackingNumber) {
+      throw new Error('Andreani no devolvió un código de seguimiento');
+    }
+
+    return {
+      trackingNumber,
+      labelUrl: labelUrl ?? '',
+    };
+  }
+
+  async getTracking(trackingNumber: string): Promise<{ status: string; events: Array<{ status: string; message: string; date: string }> }> {
+    const creds = this.credentials;
+    if (!creds) {
+      throw new Error('Andreani no está configurado');
+    }
+    const token = await this.getToken(creds.user, creds.password);
+    const res = await fetch(`${ANDREANI_BASE_URL}/v1/envios/${trackingNumber}`, {
+      headers: { 'x-authorization-token': token },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Andreani falló al obtener tracking: ${res.status}`);
+    }
+
+    const resBody = await res.json() as any;
+    const rawEvents = resBody.eventos || [];
+    const events = rawEvents.map((ev: any) => ({
+      status: ev.estado || ev.status || 'UNKNOWN',
+      message: ev.motivo || ev.message || '',
+      date: ev.fecha || ev.date || new Date().toISOString(),
+    }));
+
+    return {
+      status: resBody.estado || 'UNKNOWN',
+      events,
+    };
+  }
+
   /** Cae a la tabla manual conservando el motivo, para que se vea en el panel. */
   private async fallback(request: ShippingQuoteRequest, reason: string): Promise<ShippingQuoteDto> {
     const quote = await this.manual.quote(request);

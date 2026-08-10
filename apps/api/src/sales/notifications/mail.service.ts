@@ -108,6 +108,24 @@ export class MailService {
     });
   }
 
+  /** Aviso de que el pedido fue despachado. */
+  async sendShipmentNotification(ctx: { contactName: string; contactEmail: string; number: number; provider: string; trackingNumber: string }) {
+    const displayNumber = formatOrderNumber(ctx.number);
+    await this.send({
+      to: ctx.contactEmail,
+      subject: `Tu pedido ${displayNumber} fue despachado`,
+      html: `
+        <p>Hola ${ctx.contactName},</p>
+        <p>Te avisamos que tu pedido <strong>${displayNumber}</strong> ya fue despachado.</p>
+        <p>
+          Empresa de correo: <strong>${ctx.provider}</strong><br/>
+          Código de seguimiento: <strong>${ctx.trackingNumber}</strong>
+        </p>
+        <p>Podés hacer el seguimiento con el código en la página del correo correspondiente.</p>
+      `,
+    });
+  }
+
   private async send(message: { to: string; subject: string; html: string }) {
     try {
       await this.transporter.sendMail({ from: this.from, ...message });

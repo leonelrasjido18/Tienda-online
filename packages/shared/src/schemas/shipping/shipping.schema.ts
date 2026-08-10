@@ -63,4 +63,35 @@ export const AR_PROVINCES = [
   'Santiago del Estero',
   'Tierra del Fuego',
   'Tucumán',
-] as const;
+ ] as const;
+
+export const SHIPMENT_STATUSES = ['PREPARING', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const;
+export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
+
+export const shipmentDtoSchema = z.object({
+  id: z.string().uuid(),
+  orderId: z.string().uuid(),
+  provider: z.string(),
+  trackingNumber: z.string(),
+  labelUrl: z.string().url().nullable(),
+  status: z.enum(SHIPMENT_STATUSES),
+  shippedAt: z.string().nullable(),
+  deliveredAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ShipmentDto = z.infer<typeof shipmentDtoSchema>;
+
+export const createShipmentSchema = z.object({
+  provider: z.string().min(1).max(50),
+  trackingNumber: z.string().min(1).max(100),
+  labelUrl: z.string().url().max(500).optional().nullable(),
+});
+export type CreateShipmentInput = z.infer<typeof createShipmentSchema>;
+
+export const updateShipmentSchema = z.object({
+  status: z.enum(SHIPMENT_STATUSES),
+  trackingNumber: z.string().min(1).max(100).optional(),
+  deliveredAt: z.string().datetime().optional().nullable(),
+});
+export type UpdateShipmentInput = z.infer<typeof updateShipmentSchema>;

@@ -55,6 +55,8 @@ export interface PaymentProvider {
    * Debe lanzar si el evento es sospechoso o no se puede verificar.
    */
   resolveWebhook(ctx: WebhookContext): Promise<ResolvedWebhook | null>;
+
+  refund?(providerPaymentId: string, amountCents: number): Promise<{ providerRefundId: string; status: PaymentStatus }>;
 }
 
 export const PAYMENT_PROVIDER = Symbol('PAYMENT_PROVIDER');

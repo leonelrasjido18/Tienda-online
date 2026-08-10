@@ -18,6 +18,18 @@ export interface ShippingQuoteRequest {
 export interface ShippingProvider {
   readonly name: 'manual' | 'andreani';
   quote(request: ShippingQuoteRequest): Promise<ShippingQuoteDto>;
+  createLabel?(orderId: string, address: {
+    street: string;
+    number: string | null;
+    floor: string | null;
+    city: string;
+    province: string;
+    postalCode: string;
+    contactName: string;
+    contactPhone: string | null;
+    contactEmail: string;
+  }): Promise<{ trackingNumber: string; labelUrl: string }>;
+  getTracking?(trackingNumber: string): Promise<{ status: string; events: Array<{ status: string; message: string; date: string }> }>;
 }
 
 export const SHIPPING_PROVIDER = Symbol('SHIPPING_PROVIDER');

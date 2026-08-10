@@ -43,6 +43,19 @@ export class StockReservationService {
     }
   }
 
+  /** Devuelve stock real tras una cancelación o devolución, incrementando la cantidad disponible. */
+  async returnStock(tx: Tx, lines: ReservationLine[]) {
+    for (const line of lines) {
+      await tx.inventoryItem.update({
+        where: { variantId: line.variantId },
+        data: { quantity: { increment: line.quantity } },
+      });
+      await tx.stockMovement.create({
+        data: { variantId: line.variantId, type: 'RETURN', quantity: line.quantity, reason: 'Pedido cancelado' },
+      });
+    }
+  }
+
   /** Descuenta stock real tras un pago aprobado, liberando la reserva correspondiente. */
   async consume(tx: Tx, lines: ReservationLine[]) {
     for (const line of lines) {
