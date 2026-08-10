@@ -1,4 +1,5 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
+import type { TestingModule } from '@nestjs/testing';
 import { OrdersService } from './orders.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StockReservationService } from '../stock/stock-reservation.service';
@@ -8,13 +9,27 @@ import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { expect, vi, describe, it, beforeEach } from 'vitest';
 
+type MockFn = ReturnType<typeof vi.fn>;
+
+/**
+ * `$transaction` es una función suelta y el resto son grupos de métodos, así que
+ * el mock no se puede tipar como un diccionario uniforme: hay que declarar la forma.
+ */
+interface PrismaMock {
+  order: { findUnique: MockFn; findUniqueOrThrow: MockFn; update: MockFn };
+  payment: { findMany: MockFn; create: MockFn };
+  paymentLink: { updateMany: MockFn };
+  orderEvent: { create: MockFn };
+  $transaction: MockFn;
+}
+
 describe('OrdersService', () => {
   let service: OrdersService;
-  let prisma: any;
-  let stock: any;
-  let mail: any;
-  let push: any;
-  let registry: any;
+  let prisma: PrismaMock;
+  let stock: Record<string, MockFn>;
+  let mail: Record<string, MockFn>;
+  let push: Record<string, MockFn>;
+  let registry: Record<string, MockFn>;
 
   beforeEach(async () => {
     prisma = {

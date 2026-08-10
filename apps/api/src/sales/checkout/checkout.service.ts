@@ -1,4 +1,5 @@
 import { InjectQueue } from '@nestjs/bullmq';
+import { randomBytes } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -142,6 +143,7 @@ export class CheckoutService {
 
       const created = await tx.order.create({
         data: {
+          publicToken: randomBytes(32).toString('base64url'),
           contactName: input.contact.name,
           contactEmail: input.contact.email,
           contactPhone: input.contact.phone ?? null,
@@ -160,7 +162,7 @@ export class CheckoutService {
               variantSku: line.item.variant.sku,
               optionsLabel: this.optionsLabel(line.item) || null,
               imageUrl: line.productionImageUrl ?? line.item.variant.product.images[0]?.url ?? null,
-              unitPriceCents: line.item.priceCentsAtAdd,
+              unitPriceCents: line.item.variant.priceCents,
               quantity: line.item.quantity,
               totalCents: line.totalCents,
               fulfillmentMode: resolved,
@@ -191,16 +193,8 @@ export class CheckoutService {
         include: { payments: true },
       });
 
-      await tx.cartItem.deleteMany({ where: { cartId } });
-
       return created;
     });
-
-    await this.reservationQueue.add(
-      'expire',
-      { orderId: order.id },
-      { delay: order.expiresAt ? order.expiresAt.getTime() - Date.now() : undefined, jobId: order.id },
-    );
 
     const payment = order.payments[0];
     if (!payment) {
@@ -208,21 +202,36 @@ export class CheckoutService {
     }
     let redirectUrl: string | null = null;
 
-    if (input.paymentMethod !== 'bank_transfer') {
-      const provider = this.payments.active();
-      const checkout = await provider.createCheckout({
-        paymentId: payment.id,
-        orderId: order.id,
-        orderNumber: order.number,
-        kindLabel: payment.kind === 'FULL' ? 'Pago total' : 'Seña',
-        amountCents: payment.amountCents,
-      });
-      redirectUrl = checkout.redirectUrl;
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { provider: provider.name, rawPayload: { providerRef: checkout.providerRef } },
-      });
+    try {
+      if (input.paymentMethod !== 'bank_transfer') {
+        const provider = this.payments.active();
+        const checkout = await provider.createCheckout({
+          paymentId: payment.id,
+          orderId: order.id,
+          orderToken: order.publicToken,
+          orderNumber: order.number,
+          kindLabel: payment.kind === 'FULL' ? 'Pago total' : 'Seña',
+          amountCents: payment.amountCents,
+        });
+        redirectUrl = checkout.redirectUrl;
+        await this.prisma.payment.update({
+          where: { id: payment.id },
+          data: { provider: provider.name, rawPayload: { providerRef: checkout.providerRef } },
+        });
+      }
+    } catch (error) {
+      // No se borra el carrito hasta contar con un checkout válido. Si la
+      // pasarela falla se libera la reserva y la persona puede reintentar.
+      await this.failOrderAndReleaseReservation(order.id);
+      throw error;
     }
+
+    await this.prisma.cartItem.deleteMany({ where: { cartId } });
+    await this.reservationQueue.add(
+      'expire',
+      { orderId: order.id },
+      { delay: order.expiresAt ? order.expiresAt.getTime() - Date.now() : undefined, jobId: order.id },
+    );
 
     const mailContext = {
       number: order.number,
@@ -242,6 +251,7 @@ export class CheckoutService {
 
     return {
       orderId: order.id,
+      orderToken: order.publicToken,
       displayNumber: formatOrderNumber(order.number),
       paymentMethod: input.paymentMethod,
       redirectUrl,
@@ -253,9 +263,12 @@ export class CheckoutService {
   private async prepareLines(items: CartItemWithRelations[]): Promise<PreparedLine[]> {
     const results: PreparedLine[] = [];
     for (const item of items) {
+      if (item.variant.product.status !== 'ACTIVE') {
+        throw new BadRequestException(`El producto ${item.variant.product.name} ya no está disponible`);
+      }
       const draft = this.draftOf(item);
       const extraCents = this.computeExtraCents(draft, item.variant.product.customization);
-      const totalCents = (item.priceCentsAtAdd + extraCents) * item.quantity;
+      const totalCents = (item.variant.priceCents + extraCents) * item.quantity;
 
       if (!draft) {
         results.push({ item, extraCents, totalCents, productionImageUrl: null });
@@ -271,6 +284,26 @@ export class CheckoutService {
       results.push({ item, extraCents, totalCents, productionImageUrl: stored.url });
     }
     return results;
+  }
+
+  private async failOrderAndReleaseReservation(orderId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+      const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
+      if (!order || order.financialStatus !== 'PENDING') return;
+      const reservedLines = order.items
+        .filter((item) => item.fulfillmentMode === 'IN_STOCK' && item.variantId)
+        .map((item) => ({ variantId: item.variantId as string, quantity: item.quantity }));
+      await this.stock.lockInventory(tx, reservedLines.map((line) => line.variantId));
+      await this.stock.release(tx, reservedLines);
+      await tx.order.update({
+        where: { id: orderId },
+        data: { financialStatus: 'FAILED', fulfillmentStatus: 'CANCELLED', expiresAt: null },
+      });
+      await tx.orderEvent.create({
+        data: { orderId, type: 'payment_setup_failed', message: 'No se pudo iniciar el checkout' },
+      });
+    });
   }
 
   private draftOf(item: CartItemWithRelations): CartCustomizationDraft | null {

@@ -8,8 +8,8 @@ import { OrdersService } from './orders.service';
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
 
-  @Get(':id')
-  detail(@Param('id') id: string) {
-    return this.orders.detail(id);
+  @Get(':token')
+  detail(@Param('token') token: string) {
+    return this.orders.publicDetail(token);
   }
 }

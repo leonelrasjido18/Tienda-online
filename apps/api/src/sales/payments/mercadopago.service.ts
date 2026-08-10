@@ -77,7 +77,7 @@ export class MercadoPagoService implements PaymentProvider {
     );
 
     const mpPayment = await this.getPayment(dataId);
-    if (!mpPayment.external_reference || !mpPayment.status) {
+    if (!mpPayment.external_reference || !mpPayment.status || typeof mpPayment.transaction_amount !== 'number') {
       return null;
     }
 
@@ -86,6 +86,8 @@ export class MercadoPagoService implements PaymentProvider {
       paymentId: mpPayment.external_reference,
       status: this.mapStatus(mpPayment.status),
       providerPaymentId: String(mpPayment.id),
+      amountCents: Math.round(mpPayment.transaction_amount * 100),
+      currency: mpPayment.currency_id ?? undefined,
       raw: mpPayment,
     };
   }
@@ -123,9 +125,9 @@ export class MercadoPagoService implements PaymentProvider {
         ],
         external_reference: input.paymentId,
         back_urls: {
-          success: `${this.storefrontUrl}/pedido/${input.orderId}?estado=aprobado`,
-          failure: `${this.storefrontUrl}/pedido/${input.orderId}?estado=rechazado`,
-          pending: `${this.storefrontUrl}/pedido/${input.orderId}?estado=pendiente`,
+          success: `${this.storefrontUrl}/pedido/${input.orderToken}?estado=aprobado`,
+          failure: `${this.storefrontUrl}/pedido/${input.orderToken}?estado=rechazado`,
+          pending: `${this.storefrontUrl}/pedido/${input.orderToken}?estado=pendiente`,
         },
         auto_return: 'approved',
         notification_url: `${this.apiPublicUrl}/payments/mercadopago/webhook`,

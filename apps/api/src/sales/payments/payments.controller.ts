@@ -58,6 +58,8 @@ export class PaymentsController {
       provider: provider.name,
       status: resolved.status,
       providerPaymentId: resolved.providerPaymentId,
+      amountCents: resolved.amountCents,
+      currency: resolved.currency,
       rawPayload: resolved.raw,
     });
 

@@ -5,6 +5,7 @@ export interface CreateCheckoutInput {
   /** Nuestro Payment.id: viaja como referencia externa y vuelve en el webhook. */
   paymentId: string;
   orderId: string;
+  orderToken: string;
   orderNumber: number;
   kindLabel: string;
   amountCents: number;
@@ -35,6 +36,8 @@ export interface ResolvedWebhook {
   paymentId: string;
   status: PaymentStatus;
   providerPaymentId: string;
+  amountCents: number;
+  currency?: string;
   raw: unknown;
 }
 

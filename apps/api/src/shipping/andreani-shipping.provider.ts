@@ -16,6 +16,27 @@ interface AndreaniTarifaResponse {
   plazoEntrega?: number | string;
 }
 
+interface AndreaniLabelResponse {
+  numeroEnvio?: string;
+  trackingNumber?: string;
+  labelUrl?: string;
+  bultos?: Array<{ linkPdf?: string }>;
+}
+
+interface AndreaniTrackingEvent {
+  estado?: string;
+  status?: string;
+  motivo?: string;
+  message?: string;
+  fecha?: string;
+  date?: string;
+}
+
+interface AndreaniTrackingResponse {
+  estado?: string;
+  eventos?: AndreaniTrackingEvent[];
+}
+
 /**
  * Cotización contra la API de Andreani.
  *
@@ -146,7 +167,7 @@ export class AndreaniShippingProvider implements ShippingProvider {
       throw new Error(`Andreani rechazó la orden de envío: ${res.status}`);
     }
 
-    const resBody = await res.json() as any;
+    const resBody = (await res.json()) as AndreaniLabelResponse;
     const trackingNumber = resBody.numeroEnvio || resBody.trackingNumber;
     const labelUrl = resBody.bultos?.[0]?.linkPdf || resBody.labelUrl;
 
@@ -175,9 +196,9 @@ export class AndreaniShippingProvider implements ShippingProvider {
       throw new Error(`Andreani falló al obtener tracking: ${res.status}`);
     }
 
-    const resBody = await res.json() as any;
-    const rawEvents = resBody.eventos || [];
-    const events = rawEvents.map((ev: any) => ({
+    const resBody = (await res.json()) as AndreaniTrackingResponse;
+    const rawEvents = resBody.eventos ?? [];
+    const events = rawEvents.map((ev) => ({
       status: ev.estado || ev.status || 'UNKNOWN',
       message: ev.motivo || ev.message || '',
       date: ev.fecha || ev.date || new Date().toISOString(),

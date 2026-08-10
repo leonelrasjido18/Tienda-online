@@ -7,8 +7,16 @@ import sharp from 'sharp';
 
 const UPLOADS_ROOT = join(process.cwd(), 'uploads');
 const MAX_WIDTH = 1600;
+const MAX_INPUT_PIXELS = 40_000_000;
 const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ALLOWED_FONT_EXTENSIONS = new Set(['.woff2', '.woff', '.ttf', '.otf']);
+
+function isValidFont(buffer: Buffer, extension: string): boolean {
+  const signature = buffer.subarray(0, 4).toString('ascii');
+  if (extension === '.woff') return signature === 'wOFF';
+  if (extension === '.woff2') return signature === 'wOF2';
+  return signature === 'OTTO' || buffer.subarray(0, 4).equals(Buffer.from([0, 1, 0, 0]));
+}
 
 export interface StoredFile {
   url: string;
@@ -37,11 +45,15 @@ export class UploadsService {
 
     const filename = `${randomUUID()}.webp`;
 
-    await sharp(file.buffer)
+    try {
+      await sharp(file.buffer, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'warning' })
       .rotate()
       .resize({ width: MAX_WIDTH, withoutEnlargement: true })
       .webp({ quality: 82 })
       .toFile(join(targetDir, filename));
+    } catch {
+      throw new BadRequestException('La imagen no es válida o supera los límites permitidos');
+    }
 
     return { url: `/uploads/${folder}/${filename}` };
   }
@@ -66,6 +78,9 @@ export class UploadsService {
     const ext = extname(file.originalname).toLowerCase();
     if (!ALLOWED_FONT_EXTENSIONS.has(ext)) {
       throw new BadRequestException('Formato de tipografía no soportado (usá WOFF2, WOFF, TTF u OTF)');
+    }
+    if (!isValidFont(file.buffer, ext)) {
+      throw new BadRequestException('El archivo no contiene una tipografía válida');
     }
 
     const targetDir = join(UPLOADS_ROOT, folder);

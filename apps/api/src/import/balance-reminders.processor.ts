@@ -13,7 +13,7 @@ export class BalanceRemindersProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<any>) {
+  async process(job: Job<Record<string, never>>) {
     this.logger.log(`Iniciando ejecución de recordatorios de saldo (job: ${job.id})`);
     const result = await this.reminders.run();
     this.logger.log(`Recordatorios finalizados: ${result.reminded} recordatorios enviados, ${result.expired} links vencidos`);

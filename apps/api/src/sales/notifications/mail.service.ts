@@ -25,6 +25,10 @@ interface OrderMailContext {
   paymentPlan: 'FULL' | 'DEPOSIT_BALANCE';
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]!);
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -50,7 +54,7 @@ export class MailService {
       to: order.contactEmail,
       subject: `Confirmamos tu pedido ${displayNumber}`,
       html: `
-        <p>Hola ${order.contactName},</p>
+        <p>Hola ${escapeHtml(order.contactName)},</p>
         <p>Recibimos tu pedido <strong>${displayNumber}</strong> por un total de ${formatCentsAsArs(order.totalCents)}.</p>
         <p>${
           order.paymentPlan === 'DEPOSIT_BALANCE'
@@ -68,7 +72,7 @@ export class MailService {
       subject: `${eventLabel}: pedido ${displayNumber} — ${formatCentsAsArs(order.totalCents)}`,
       html: `
         <p>${eventLabel}</p>
-        <p>Pedido ${displayNumber} de ${order.contactName} (${order.contactEmail}).</p>
+        <p>Pedido ${displayNumber} de ${escapeHtml(order.contactName)} (${escapeHtml(order.contactEmail)}).</p>
         <p>Total: ${formatCentsAsArs(order.totalCents)}</p>
       `,
     });
@@ -80,14 +84,14 @@ export class MailService {
       to: ctx.contactEmail,
       subject: `¡Llegó tu pedido ${ctx.displayNumber}! Resta abonar ${formatCentsAsArs(ctx.amountCents)}`,
       html: `
-        <p>Hola ${ctx.contactName},</p>
+        <p>Hola ${escapeHtml(ctx.contactName)},</p>
         <p>Tu pedido <strong>${ctx.displayNumber}</strong> ya llegó y está listo para despacharse.</p>
         <p>
           Saldo: ${formatCentsAsArs(ctx.balanceCents)}<br/>
           Envío: ${formatCentsAsArs(ctx.shippingCents)}<br/>
           <strong>Total a pagar: ${formatCentsAsArs(ctx.amountCents)}</strong>
         </p>
-        <p><a href="${ctx.url}">Pagar el saldo</a></p>
+        <p><a href="${escapeHtml(ctx.url)}">Pagar el saldo</a></p>
         <p>El link vence el ${ctx.expiresAt.toLocaleDateString('es-AR')}.</p>
       `,
     });
@@ -99,10 +103,10 @@ export class MailService {
       to: ctx.contactEmail,
       subject: `Recordatorio: te falta abonar el pedido ${ctx.displayNumber}`,
       html: `
-        <p>Hola ${ctx.contactName},</p>
+        <p>Hola ${escapeHtml(ctx.contactName)},</p>
         <p>Tu pedido <strong>${ctx.displayNumber}</strong> sigue esperando el pago del saldo.</p>
         <p><strong>Total a pagar: ${formatCentsAsArs(ctx.amountCents)}</strong></p>
-        <p><a href="${ctx.url}">Pagar ahora</a></p>
+        <p><a href="${escapeHtml(ctx.url)}">Pagar ahora</a></p>
         <p>${daysLeft > 0 ? `Te quedan ${daysLeft} día(s) antes de que venza el link.` : 'El link está por vencer.'}</p>
       `,
     });
@@ -115,11 +119,11 @@ export class MailService {
       to: ctx.contactEmail,
       subject: `Tu pedido ${displayNumber} fue despachado`,
       html: `
-        <p>Hola ${ctx.contactName},</p>
+        <p>Hola ${escapeHtml(ctx.contactName)},</p>
         <p>Te avisamos que tu pedido <strong>${displayNumber}</strong> ya fue despachado.</p>
         <p>
-          Empresa de correo: <strong>${ctx.provider}</strong><br/>
-          Código de seguimiento: <strong>${ctx.trackingNumber}</strong>
+          Empresa de correo: <strong>${escapeHtml(ctx.provider)}</strong><br/>
+          Código de seguimiento: <strong>${escapeHtml(ctx.trackingNumber)}</strong>
         </p>
         <p>Podés hacer el seguimiento con el código en la página del correo correspondiente.</p>
       `,

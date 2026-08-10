@@ -1,6 +1,6 @@
 'use client';
 
-import { formatCentsAsArs, type OrderDetailDto } from '@tienda/shared';
+import { formatCentsAsArs, type PublicOrderDetailDto } from '@tienda/shared';
 import { buttonVariants } from '@tienda/ui';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -18,11 +18,11 @@ export default function OrderConfirmationPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const estado = searchParams.get('estado');
-  const [order, setOrder] = useState<OrderDetailDto | null>(null);
+  const [order, setOrder] = useState<PublicOrderDetailDto | null>(null);
   const [bankTransferInstructions, setBankTransferInstructions] = useState<string | null>(null);
 
   useEffect(() => {
-    clientFetch<OrderDetailDto>(`/orders/${params.id}`)
+    clientFetch<PublicOrderDetailDto>(`/orders/${params.id}`)
       .then(setOrder)
       .catch(() => undefined);
   }, [params.id]);

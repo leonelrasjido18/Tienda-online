@@ -21,6 +21,9 @@ export class ReservationExpiryProcessor extends WorkerHost {
     const { orderId } = job.data;
 
     await this.prisma.$transaction(async (tx) => {
+      // Coordina con la aprobación del pago: ambas transiciones compiten por
+      // la misma orden y nunca pueden liberar/consumir una reserva en paralelo.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
       const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
       if (!order || order.financialStatus !== 'PENDING') return;
 

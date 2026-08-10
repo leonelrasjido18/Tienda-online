@@ -52,6 +52,25 @@ export const envSchema = z.object({
 
   /** Días de vigencia del link de cobro del saldo. */
   BALANCE_LINK_TTL_DAYS: z.coerce.number().int().positive().default(14),
+}).superRefine((env, ctx) => {
+  if (env.NODE_ENV !== 'production') return;
+
+  for (const [key, value] of Object.entries({ JWT_ACCESS_SECRET: env.JWT_ACCESS_SECRET, COOKIE_SECRET: env.COOKIE_SECRET })) {
+    if (/dev-|change-me|changeme/i.test(value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: 'No puede usar un secreto de desarrollo en producción' });
+    }
+  }
+  for (const [key, value] of Object.entries({ ADMIN_URL: env.ADMIN_URL, STOREFRONT_URL: env.STOREFRONT_URL, API_PUBLIC_URL: env.API_PUBLIC_URL })) {
+    if (!value.startsWith('https://')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: 'Debe usar HTTPS en producción' });
+    }
+  }
+  if (env.PAYMENT_PROVIDER === 'mercadopago' && (!env.MP_ACCESS_TOKEN || !env.MP_WEBHOOK_SECRET)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['MP_ACCESS_TOKEN'], message: 'Mercado Pago requiere token y secreto de webhook en producción' });
+  }
+  if (env.PAYMENT_PROVIDER === 'uala' && (!env.UALA_USERNAME || !env.UALA_CLIENT_ID || !env.UALA_CLIENT_SECRET || env.UALA_ENV !== 'production')) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['UALA_USERNAME'], message: 'Ualá requiere credenciales y ambiente production en producción' });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;

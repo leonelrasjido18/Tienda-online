@@ -57,8 +57,11 @@ export class CartService {
   }
 
   async addItem(cartId: string, input: AddCartItemInput): Promise<CartDto> {
-    const variant = await this.prisma.productVariant.findUnique({ where: { id: input.variantId } });
-    if (!variant) {
+    const variant = await this.prisma.productVariant.findUnique({
+      where: { id: input.variantId },
+      include: { product: true },
+    });
+    if (!variant || variant.product.status !== 'ACTIVE') {
       throw new NotFoundException('La variante no existe');
     }
 

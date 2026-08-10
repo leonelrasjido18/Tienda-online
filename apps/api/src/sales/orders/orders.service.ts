@@ -4,6 +4,8 @@ import {
   formatOrderNumber,
   type OrderDetailDto,
   type OrderFinancialStatus,
+  type PublicOrderDetailDto,
+  type ShipmentStatus,
   type OrderSummaryDto,
   type PaymentStatus as PaymentStatusValue,
 } from '@tienda/shared';
@@ -79,6 +81,30 @@ export class OrdersService {
       throw new NotFoundException('El pedido no existe');
     }
     return this.toDetailDto(order);
+  }
+
+  async publicDetail(token: string): Promise<PublicOrderDetailDto> {
+    const order = await this.prisma.order.findUnique({ where: { publicToken: token }, include: ORDER_DETAIL_INCLUDE });
+    if (!order) {
+      throw new NotFoundException('El pedido no existe');
+    }
+    return {
+      displayNumber: formatOrderNumber(order.number),
+      contactName: order.contactName,
+      paymentPlan: order.paymentPlan,
+      financialStatus: order.financialStatus,
+      fulfillmentStatus: order.fulfillmentStatus,
+      totalCents: order.totalCents,
+      balanceCents: order.balanceCents,
+      payments: order.payments.map((payment) => ({
+        id: payment.id,
+        kind: payment.kind,
+        provider: payment.provider,
+        amountCents: payment.amountCents,
+        status: payment.status,
+        createdAt: payment.createdAt.toISOString(),
+      })),
+    };
   }
 
   /** Aprobación manual de una transferencia bancaria desde el panel. */
@@ -225,7 +251,7 @@ export class OrdersService {
           providerPaymentId: providerRefundId,
           amountCents: -amountCents,
           status: 'APPROVED',
-          rawPayload: { reason: reason ?? null } as any,
+          rawPayload: { reason: reason ?? null } as Prisma.InputJsonValue,
         },
       });
 
@@ -251,12 +277,12 @@ export class OrdersService {
         await tx.order.findUniqueOrThrow({
           where: { id: orderId },
           include: ORDER_DETAIL_INCLUDE,
-        }) as any
+        }) as OrderWithRelations
       );
     });
   }
 
-  async createShipment(orderId: string, input: any) {
+  async createShipment(orderId: string, input: { provider: string; trackingNumber: string; labelUrl?: string | null }) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { shipment: true },
@@ -311,7 +337,7 @@ export class OrdersService {
     return this.detail(orderId);
   }
 
-  async updateShipment(orderId: string, input: any) {
+  async updateShipment(orderId: string, input: { status: string; trackingNumber?: string }) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { shipment: true },
@@ -354,10 +380,20 @@ export class OrdersService {
    */
   async applyPaymentStatus(
     paymentId: string,
-    result: { provider: string; status: PaymentStatusValue; providerPaymentId: string; rawPayload: unknown },
+    result: {
+      provider: string;
+      status: PaymentStatusValue;
+      providerPaymentId: string;
+      amountCents: number;
+      currency?: string;
+      rawPayload: unknown;
+    },
   ) {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment) return;
+    if (payment.provider !== result.provider || payment.amountCents !== result.amountCents || result.currency && result.currency !== 'ARS') {
+      throw new BadRequestException('El webhook no coincide con el pago esperado');
+    }
 
     if (result.status === 'APPROVED' && payment.status !== 'APPROVED') {
       await this.applyApprovedPayment(payment.id, {
@@ -367,6 +403,9 @@ export class OrdersService {
       });
       return;
     }
+
+    // Los eventos fuera de orden no pueden degradar un pago ya confirmado.
+    if (payment.status === 'APPROVED') return;
 
     await this.prisma.payment.update({
       where: { id: payment.id },
@@ -383,6 +422,16 @@ export class OrdersService {
     extra: { provider: string; providerPaymentId?: string; rawPayload?: unknown },
   ) {
     const order = await this.prisma.$transaction(async (tx) => {
+      // La comprobación previa al entrar al método no es suficiente: dos
+      // webhooks distintos pueden llegar a la vez. Se bloquea la fila antes de
+      // decidir la transición para que sólo uno consuma la reserva.
+      const [lockedPayment] = await tx.$queryRaw<Payment[]>`
+        SELECT * FROM payments WHERE id = ${paymentId} FOR UPDATE
+      `;
+      if (!lockedPayment || lockedPayment.status === 'APPROVED' || lockedPayment.status !== 'PENDING') {
+        return null;
+      }
+
       const payment = await tx.payment.update({
         where: { id: paymentId },
         data: {
@@ -392,6 +441,7 @@ export class OrdersService {
         },
       });
 
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${payment.orderId} FOR UPDATE`;
       const currentOrder = await tx.order.findUniqueOrThrow({
         where: { id: payment.orderId },
         include: { items: true },
@@ -405,6 +455,7 @@ export class OrdersService {
         const inStockLines = currentOrder.items
           .filter((item) => item.fulfillmentMode === 'IN_STOCK' && item.variantId)
           .map((item) => ({ variantId: item.variantId as string, quantity: item.quantity }));
+        await this.stock.lockInventory(tx, inStockLines.map((line) => line.variantId));
         await this.stock.consume(tx, inStockLines);
       }
 
@@ -443,6 +494,8 @@ export class OrdersService {
 
       return updated;
     });
+
+    if (!order) return;
 
     const mailContext = {
       number: order.number,
@@ -533,7 +586,7 @@ export class OrdersService {
             provider: order.shipment.provider,
             trackingNumber: order.shipment.trackingNumber,
             labelUrl: order.shipment.labelUrl,
-            status: order.shipment.status as any,
+            status: order.shipment.status as ShipmentStatus,
             shippedAt: order.shipment.shippedAt?.toISOString() ?? null,
             deliveredAt: order.shipment.deliveredAt?.toISOString() ?? null,
             createdAt: order.shipment.createdAt.toISOString(),

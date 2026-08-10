@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { FULFILLMENT_MODES } from '../catalog/product.schema';
-import { shipmentDtoSchema } from '../shipping/shipping.schema';
+import { createShipmentSchema, shipmentDtoSchema, updateShipmentSchema } from '../shipping/shipping.schema';
 
 export const ORDER_FINANCIAL_STATUSES = [
   'PENDING',
@@ -81,6 +81,7 @@ export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const createOrderResponseSchema = z.object({
   orderId: z.string().uuid(),
+  orderToken: z.string().min(32),
   displayNumber: z.string(),
   paymentMethod: z.enum(CHECKOUT_PAYMENT_METHODS),
   redirectUrl: z.string().nullable(),
@@ -133,6 +134,19 @@ export const orderPaymentDtoSchema = z.object({
 });
 export type OrderPaymentDto = z.infer<typeof orderPaymentDtoSchema>;
 
+/** Vista mínima para la persona que posee el enlace secreto del pedido. */
+export const publicOrderDetailSchema = z.object({
+  displayNumber: z.string(),
+  contactName: z.string(),
+  paymentPlan: z.enum(PAYMENT_PLANS),
+  financialStatus: z.enum(ORDER_FINANCIAL_STATUSES),
+  fulfillmentStatus: z.enum(ORDER_FULFILLMENT_STATUSES),
+  totalCents: z.number().int(),
+  balanceCents: z.number().int().nullable(),
+  payments: z.array(orderPaymentDtoSchema),
+});
+export type PublicOrderDetailDto = z.infer<typeof publicOrderDetailSchema>;
+
 export const orderSummarySchema = z.object({
   id: z.string().uuid(),
   number: z.number().int(),
@@ -168,6 +182,20 @@ export const orderDetailSchema = orderSummarySchema.extend({
   shipment: shipmentDtoSchema.nullable(),
 });
 export type OrderDetailDto = z.infer<typeof orderDetailSchema>;
+
+export const cancelOrderSchema = z.object({
+  reason: z.string().trim().min(1).max(500).optional(),
+});
+export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
+
+export const refundOrderSchema = z.object({
+  amountCents: z.number().int().positive(),
+  reason: z.string().trim().min(1).max(500).optional(),
+});
+export type RefundOrderInput = z.infer<typeof refundOrderSchema>;
+
+export { createShipmentSchema, updateShipmentSchema };
+export type { CreateShipmentInput, UpdateShipmentInput } from '../shipping/shipping.schema';
 
 /** Número de pedido legible para mostrarle al cliente/clienta, ej: 1 -> "#1001". */
 export function formatOrderNumber(number: number): string {

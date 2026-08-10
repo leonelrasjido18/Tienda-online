@@ -208,6 +208,7 @@ export class BalanceService {
     const checkout = await provider.createCheckout({
       paymentId: payment.id,
       orderId: link.orderId,
+      orderToken: link.order.publicToken,
       orderNumber: link.order.number,
       kindLabel: 'Saldo + envío',
       amountCents: link.amountCents,

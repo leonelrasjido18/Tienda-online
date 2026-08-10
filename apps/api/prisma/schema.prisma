@@ -531,6 +531,8 @@ model CartItem {
 model Order {
   id     String @id @default(uuid())
   number Int    @unique @default(autoincrement())
+  /// Token público de alta entropía. Nunca se exponen los UUID internos al cliente.
+  publicToken String @unique
 
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)

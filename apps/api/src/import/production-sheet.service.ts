@@ -43,15 +43,11 @@ export class ProductionSheetService {
       for (const item of order.items) {
         if (item.customization) {
           let patchNames: string[] = [];
-          try {
-            const patchIds = item.customization.patchIds as string[];
-            if (Array.isArray(patchIds) && patchIds.length > 0) {
-              const patches = await this.prisma.patch.findMany({
-                where: { id: { in: patchIds } },
-              });
-              patchNames = patches.map((p) => p.name);
-            }
-          } catch {}
+          const patchIds = item.customization.patchIds;
+          if (Array.isArray(patchIds) && patchIds.every((id): id is string => typeof id === 'string') && patchIds.length > 0) {
+            const patches = await this.prisma.patch.findMany({ where: { id: { in: patchIds } } });
+            patchNames = patches.map((p) => p.name);
+          }
 
           itemsToPrint.push({
             orderNumber: formatOrderNumber(order.number),

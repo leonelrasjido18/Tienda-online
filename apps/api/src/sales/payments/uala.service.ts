@@ -105,8 +105,8 @@ export class UalaService implements PaymentProvider {
         // Ualá espera el monto en pesos como string; nosotros guardamos centavos.
         amount: (input.amountCents / 100).toFixed(2),
         description: `Pedido ${formatOrderNumber(input.orderNumber)} — ${input.kindLabel}`,
-        callback_success: `${storefront}/pedido/${input.orderId}?estado=aprobado`,
-        callback_fail: `${storefront}/pedido/${input.orderId}?estado=rechazado`,
+        callback_success: `${storefront}/pedido/${input.orderToken}?estado=aprobado`,
+        callback_fail: `${storefront}/pedido/${input.orderToken}?estado=rechazado`,
         notification_url: `${apiUrl}/payments/uala/webhook`,
         external_reference: input.paymentId,
       }),
@@ -136,7 +136,7 @@ export class UalaService implements PaymentProvider {
     // Nunca se confía en body.status: se reconsulta el estado real a Ualá.
     const order = await this.fetchOrder(uuid);
     const paymentId = order.external_reference ?? body.external_reference;
-    if (!paymentId) {
+    if (!paymentId || typeof order.amount !== 'number') {
       throw new UnauthorizedException('El webhook no referencia ningún pago conocido');
     }
 
@@ -148,6 +148,7 @@ export class UalaService implements PaymentProvider {
       paymentId,
       status: this.mapStatus(order.status),
       providerPaymentId: uuid,
+      amountCents: Math.round(order.amount * 100),
       raw: order,
     };
   }

@@ -1,8 +1,19 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UsePipes } from '@nestjs/common';
 import { ORDER_FINANCIAL_STATUSES } from '@tienda/shared';
+import {
+  cancelOrderSchema,
+  createShipmentSchema,
+  refundOrderSchema,
+  type CancelOrderInput,
+  type CreateShipmentInput,
+  type RefundOrderInput,
+  updateShipmentSchema,
+  type UpdateShipmentInput,
+} from '@tienda/shared';
 import { z } from 'zod';
 
 import { OrdersService } from './orders.service';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 
 const adminListQuerySchema = z.object({
   financialStatus: z.enum(ORDER_FINANCIAL_STATUSES).optional(),
@@ -32,22 +43,26 @@ export class AdminOrdersController {
   }
 
   @Post(':id/cancel')
-  cancel(@Param('id') id: string, @Body() body: { reason?: string }) {
+  @UsePipes(new ZodValidationPipe(cancelOrderSchema))
+  cancel(@Param('id') id: string, @Body() body: CancelOrderInput) {
     return this.orders.cancel(id, body.reason);
   }
 
   @Post(':id/refund')
-  refund(@Param('id') id: string, @Body() body: { amountCents: number; reason?: string }) {
+  @UsePipes(new ZodValidationPipe(refundOrderSchema))
+  refund(@Param('id') id: string, @Body() body: RefundOrderInput) {
     return this.orders.refund(id, body);
   }
 
   @Post(':id/shipment')
-  createShipment(@Param('id') id: string, @Body() body: { provider: string; trackingNumber: string; labelUrl?: string }) {
+  @UsePipes(new ZodValidationPipe(createShipmentSchema))
+  createShipment(@Param('id') id: string, @Body() body: CreateShipmentInput) {
     return this.orders.createShipment(id, body);
   }
 
   @Patch(':id/shipment')
-  updateShipment(@Param('id') id: string, @Body() body: { status: string; trackingNumber?: string }) {
+  @UsePipes(new ZodValidationPipe(updateShipmentSchema))
+  updateShipment(@Param('id') id: string, @Body() body: UpdateShipmentInput) {
     return this.orders.updateShipment(id, body);
   }
 }

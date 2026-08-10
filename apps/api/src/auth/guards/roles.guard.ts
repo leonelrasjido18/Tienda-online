@@ -10,17 +10,21 @@ export class RolesGuard {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<StaffRole[]>(ROLES_KEY, [
+    const declaredRoles = this.reflector.getAllAndOverride<StaffRole[]>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
+    const request = context.switchToHttp().getRequest<{ originalUrl?: string; user?: AuthenticatedUser }>();
+    // Todo endpoint bajo /admin queda protegido aun si alguien olvida anotar el
+    // controlador. Los permisos más granulares se declaran explícitamente con
+    // @Roles cuando se incorporen nuevos perfiles.
+    const requiredRoles = declaredRoles ?? (request.originalUrl?.startsWith('/admin/') ? ['OWNER'] : undefined);
 
     if (!requiredRoles || requiredRoles.length === 0) {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
-    const user: AuthenticatedUser | undefined = request.user;
+    const user = request.user;
 
     if (!user || !requiredRoles.includes(user.role)) {
       throw new ForbiddenException('No tenés permisos para esta acción');

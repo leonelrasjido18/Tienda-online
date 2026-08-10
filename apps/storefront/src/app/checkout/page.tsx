@@ -137,7 +137,7 @@ export default function CheckoutPage() {
         window.location.href = response.redirectUrl;
         return;
       }
-      router.push(`/pedido/${response.orderId}`);
+      router.push(`/pedido/${response.orderToken}`);
     } catch {
       setSubmitError('No pudimos confirmar el pedido. Revisá los datos e intentá de nuevo.');
       setIsSubmitting(false);
