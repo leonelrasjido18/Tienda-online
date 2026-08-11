@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Tiene que ser un color hexadecimal, ej: #FFFFFF');
+export const hexColor = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'Tiene que ser un color hexadecimal, ej: #FFFFFF');
 
 export const upsertLeagueFontSchema = z.object({
   leagueId: z.string().uuid(),

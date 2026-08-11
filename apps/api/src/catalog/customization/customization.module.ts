@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { UploadsModule } from '../uploads/uploads.module';
+import { AnalyzerService } from './analyzer.service';
 import { FontsController } from './fonts.controller';
 import { FontsService } from './fonts.service';
 import { PatchesController } from './patches.controller';
@@ -13,7 +14,7 @@ import { TemplatesService } from './templates.service';
 @Module({
   imports: [UploadsModule],
   controllers: [FontsController, PatchesController, TemplatesController, RenderController],
-  providers: [FontsService, PatchesService, TemplatesService, RenderService],
-  exports: [FontsService, PatchesService, TemplatesService, RenderService],
+  providers: [FontsService, PatchesService, TemplatesService, RenderService, AnalyzerService],
+  exports: [FontsService, PatchesService, TemplatesService, RenderService, AnalyzerService],
 })
 export class CustomizationModule {}

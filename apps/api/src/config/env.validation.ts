@@ -46,6 +46,11 @@ export const envSchema = z.object({
   // Marca en el feed de Google Merchant (opcional).
   MERCHANT_FEED_BRAND: z.string().default('Remeras del Área'),
 
+  // Analizador de estilo de estampado con IA (opcional). Sin la key, el endpoint
+  // /customization/analyze devuelve 400 con un mensaje claro y el resto funciona igual.
+  ANTHROPIC_API_KEY: z.string().default(''),
+  ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
+
   CHECKOUT_RESERVATION_TTL_MINUTES: z.coerce.number().int().positive().default(20),
   BANK_TRANSFER_RESERVATION_TTL_HOURS: z.coerce.number().int().positive().default(48),
 

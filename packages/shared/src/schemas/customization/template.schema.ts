@@ -1,9 +1,21 @@
 import { z } from 'zod';
 
 import { moneyCentsSchema } from '../catalog/common.schema';
-import { leagueFontSchema } from './font.schema';
+import { hexColor, leagueFontSchema } from './font.schema';
 import { patchSchema } from './patch.schema';
 import { printAreaSchema } from './print-area.schema';
+
+/**
+ * Estilo del estampado por producto (color, contorno, interletrado). Vive en la
+ * plantilla y no en la fuente porque el mismo tipo de letra aparece en camisetas
+ * con colores muy distintos. Es lo que completa el analizador de IA leyendo la foto.
+ */
+export const customizationStyleFields = {
+  fillColor: hexColor.default('#FFFFFF'),
+  strokeColor: hexColor.nullish(),
+  strokeWidthPx: z.number().int().min(0).max(20).default(0),
+  letterSpacingPx: z.number().int().min(-10).max(50).default(0),
+};
 
 export const upsertCustomizationTemplateSchema = z
   .object({
@@ -16,6 +28,7 @@ export const upsertCustomizationTemplateSchema = z
     nameExtraCents: moneyCentsSchema.default(0),
     numberExtraCents: moneyCentsSchema.default(0),
     fontId: z.string().uuid().nullish(),
+    ...customizationStyleFields,
     customizationImageId: z.string().uuid().nullish(),
     namePrintArea: printAreaSchema,
     numberPrintArea: printAreaSchema,
@@ -41,6 +54,10 @@ export const productCustomizationSchema = z.object({
   maxNumber: z.number().int(),
   nameExtraCents: z.number().int(),
   numberExtraCents: z.number().int(),
+  fillColor: z.string(),
+  strokeColor: z.string().nullable(),
+  strokeWidthPx: z.number().int(),
+  letterSpacingPx: z.number().int(),
   customizationImageId: z.string().uuid().nullable(),
   namePrintArea: printAreaSchema,
   numberPrintArea: printAreaSchema,

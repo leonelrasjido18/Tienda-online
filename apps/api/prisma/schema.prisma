@@ -418,6 +418,13 @@ model CustomizationTemplate {
   numberExtraCents     Int           @default(0)
   fontId               String?
   font                 LeagueFont?   @relation(fields: [fontId], references: [id], onDelete: SetNull)
+  // Estilo por producto: los colores/contorno viven acá y no en la fuente, porque
+  // el mismo tipo de letra (bloque, retro…) aparece en camisetas con colores muy
+  // distintos. El analizador de IA los completa leyendo la foto modelo.
+  fillColor            String        @default("#FFFFFF")
+  strokeColor          String?
+  strokeWidthPx        Int           @default(0)
+  letterSpacingPx      Int           @default(0)
   customizationImageId String?
   customizationImage   ProductImage? @relation(fields: [customizationImageId], references: [id], onDelete: SetNull)
   namePrintArea        Json

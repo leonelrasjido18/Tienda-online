@@ -13,6 +13,7 @@ import {
 import {
   formatCentsAsArs,
   parseArsToCents,
+  type CustomizationAnalysisResult,
   type LeagueDto,
   type LeagueFontDto,
   type PatchDto,
@@ -70,6 +71,11 @@ export function ProductCustomizationEditor({
   const [nameExtraText, setNameExtraText] = useState(((c?.nameExtraCents ?? 0) / 100).toString());
   const [numberExtraText, setNumberExtraText] = useState(((c?.numberExtraCents ?? 0) / 100).toString());
   const [fontId, setFontId] = useState<string | null>(c?.font?.id ?? null);
+  const [fillColor, setFillColor] = useState(c?.fillColor ?? '#FFFFFF');
+  const [strokeEnabled, setStrokeEnabled] = useState((c?.strokeWidthPx ?? 0) > 0);
+  const [strokeColor, setStrokeColor] = useState(c?.strokeColor ?? '#000000');
+  const [strokeWidthPx, setStrokeWidthPx] = useState(c?.strokeWidthPx ?? 0);
+  const [letterSpacingPx, setLetterSpacingPx] = useState(c?.letterSpacingPx ?? 0);
   const [customizationImageId, setCustomizationImageId] = useState<string | null>(
     c?.customizationImageId ?? product.images[0]?.id ?? null,
   );
@@ -79,6 +85,7 @@ export function ProductCustomizationEditor({
   const [numberArea, setNumberArea] = useState<PrintArea>(c?.numberPrintArea ?? defaultNumberArea());
   const [patchArea, setPatchArea] = useState<PrintArea>(c?.patchPrintArea ?? defaultPatchArea());
   const [error, setError] = useState<string | null>(null);
+  const [analysisNote, setAnalysisNote] = useState<string | null>(null);
   const [previewHeight, setPreviewHeight] = useState(Math.round(PREVIEW_WIDTH * 1.2));
 
   const saveMutation = useMutation({
@@ -101,6 +108,10 @@ export function ProductCustomizationEditor({
         nameExtraCents,
         numberExtraCents,
         fontId,
+        fillColor,
+        strokeColor: strokeEnabled ? strokeColor : null,
+        strokeWidthPx: strokeEnabled ? strokeWidthPx : 0,
+        letterSpacingPx,
         customizationImageId,
         namePrintArea: nameArea,
         numberPrintArea: numberArea,
@@ -115,6 +126,38 @@ export function ProductCustomizationEditor({
     },
     onError: (err) => {
       setError(err instanceof ApiError ? err.message : 'Revisá los precios extra: tienen que ser números.');
+    },
+  });
+
+  // Analiza la foto elegida con IA y pre-rellena color, contorno, interletrado y las
+  // cajas de nombre/dorsal. El operador siempre puede ajustar antes de guardar.
+  const analyzeMutation = useMutation({
+    mutationFn: () => {
+      if (!customizationImageId) throw new Error('Elegí una foto para analizar.');
+      return api<CustomizationAnalysisResult>(`/admin/products/${productId}/customization/analyze`, {
+        method: 'POST',
+        body: JSON.stringify({ imageId: customizationImageId }),
+      });
+    },
+    onSuccess: (res) => {
+      setFillColor(res.fillColor);
+      if (res.strokeColor && res.strokeWidthPx > 0) {
+        setStrokeEnabled(true);
+        setStrokeColor(res.strokeColor);
+        setStrokeWidthPx(res.strokeWidthPx);
+      } else {
+        setStrokeEnabled(false);
+      }
+      setLetterSpacingPx(res.letterSpacingPx);
+      setNameArea(res.namePrintArea);
+      setNumberArea(res.numberPrintArea);
+      if (res.suggestedFontId) setFontId(res.suggestedFontId);
+      setAnalysisNote(res.notes);
+      setError(null);
+    },
+    onError: (err) => {
+      setAnalysisNote(null);
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'No se pudo analizar la imagen.');
     },
   });
 
@@ -157,6 +200,9 @@ export function ProductCustomizationEditor({
           {product.images.length > 1 && (
             <div className="mb-3">
               <Label>Foto donde va la personalización</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Elegí la foto de la espalda con el nombre/dorsal de ejemplo: es la que analiza la IA.
+              </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {product.images.map((image) => (
                   <button
@@ -174,6 +220,21 @@ export function ProductCustomizationEditor({
               </div>
             </div>
           )}
+
+          <div className="mb-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => analyzeMutation.mutate()}
+              disabled={analyzeMutation.isPending || !customizationImageId}
+            >
+              {analyzeMutation.isPending ? 'Analizando…' : '✨ Analizar con IA'}
+            </Button>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Detecta color, contorno y ubicación del nombre/dorsal desde la foto elegida y completa los campos.
+            </p>
+            {analysisNote && <p className="mt-1 text-xs text-emerald-600">IA: {analysisNote}</p>}
+          </div>
           <div
             className="relative overflow-hidden rounded-lg border border-border bg-muted"
             style={{ width: PREVIEW_WIDTH, height: previewHeight }}
@@ -255,6 +316,83 @@ export function ProductCustomizationEditor({
                 que los clientes puedan poner nombre y dorsal.
               </p>
             )}
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between">
+              <Label>Estilo del estampado</Label>
+              <span className="text-xs text-muted-foreground">Color del nombre y el dorsal</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={fillColor}
+                onChange={(e) => setFillColor(e.target.value)}
+                className="h-9 w-12 cursor-pointer rounded border border-border bg-transparent"
+                aria-label="Color de relleno"
+              />
+              <div className="space-y-1">
+                <Label htmlFor="fillColorHex" className="text-xs">Color de relleno</Label>
+                <Input
+                  id="fillColorHex"
+                  value={fillColor}
+                  onChange={(e) => setFillColor(e.target.value)}
+                  className="w-28 font-mono text-xs uppercase"
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={strokeEnabled} onChange={(e) => setStrokeEnabled(e.target.checked)} />
+              Con contorno
+            </label>
+
+            {strokeEnabled && (
+              <div className="flex items-end gap-3">
+                <input
+                  type="color"
+                  value={strokeColor}
+                  onChange={(e) => setStrokeColor(e.target.value)}
+                  className="h-9 w-12 cursor-pointer rounded border border-border bg-transparent"
+                  aria-label="Color del contorno"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="strokeColorHex" className="text-xs">Color del contorno</Label>
+                  <Input
+                    id="strokeColorHex"
+                    value={strokeColor}
+                    onChange={(e) => setStrokeColor(e.target.value)}
+                    className="w-28 font-mono text-xs uppercase"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="strokeWidth" className="text-xs">Grosor (px)</Label>
+                  <Input
+                    id="strokeWidth"
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={strokeWidthPx}
+                    onChange={(e) => setStrokeWidthPx(Number(e.target.value))}
+                    className="w-20"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label htmlFor="letterSpacing" className="text-xs">Interletrado (px)</Label>
+              <Input
+                id="letterSpacing"
+                type="number"
+                min={-10}
+                max={50}
+                value={letterSpacingPx}
+                onChange={(e) => setLetterSpacingPx(Number(e.target.value))}
+                className="w-20"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

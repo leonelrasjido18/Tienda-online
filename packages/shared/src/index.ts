@@ -20,6 +20,7 @@ export * from './schemas/customization/font.schema';
 export * from './schemas/customization/patch.schema';
 export * from './schemas/customization/template.schema';
 export * from './schemas/customization/customization-input.schema';
+export * from './schemas/customization/analysis.schema';
 
 export * from './schemas/sales/cart.schema';
 export * from './schemas/sales/order.schema';

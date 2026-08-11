@@ -109,9 +109,10 @@ export function CustomizationBlock({
               y={nameBox.top + nameBox.height / 2}
               fontSize={nameFontSize}
               fontFamily={fontFamily}
-              fill={customization.font?.fillColor ?? '#FFFFFF'}
-              stroke={customization.font?.strokeColor ?? 'none'}
-              strokeWidth={customization.font?.strokeWidthPx ?? 0}
+              fill={customization.fillColor}
+              stroke={customization.strokeColor ?? 'none'}
+              strokeWidth={customization.strokeWidthPx}
+              letterSpacing={customization.letterSpacingPx}
               paintOrder="stroke"
               textAnchor="middle"
               dominantBaseline="central"
@@ -125,9 +126,10 @@ export function CustomizationBlock({
               y={numberBox.top + numberBox.height / 2}
               fontSize={numberFontSize}
               fontFamily={fontFamily}
-              fill={customization.font?.fillColor ?? '#FFFFFF'}
-              stroke={customization.font?.strokeColor ?? 'none'}
-              strokeWidth={customization.font?.strokeWidthPx ?? 0}
+              fill={customization.fillColor}
+              stroke={customization.strokeColor ?? 'none'}
+              strokeWidth={customization.strokeWidthPx}
+              letterSpacing={customization.letterSpacingPx}
               paintOrder="stroke"
               textAnchor="middle"
               dominantBaseline="central"

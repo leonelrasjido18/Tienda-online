@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { computeFontSizeForBox, resolvePrintArea, type LeagueFontDto, type PrintArea } from '@tienda/shared';
+import { computeFontSizeForBox, resolvePrintArea, type PrintArea } from '@tienda/shared';
 import satori from 'satori';
 import sharp from 'sharp';
 
@@ -29,6 +29,16 @@ export interface RenderCustomizationInput {
 interface SatoriNode {
   type: string;
   props: Record<string, unknown> & { children?: SatoriNode | SatoriNode[] | string };
+}
+
+// El estilo del estampado: el tipo de letra sale de la fuente, pero color, contorno
+// e interletrado son propios del producto (los completa el analizador de IA).
+interface TextStyle {
+  fontName: string;
+  fillColor: string;
+  strokeColor: string | null;
+  strokeWidthPx: number;
+  letterSpacingPx: number;
 }
 
 @Injectable()
@@ -73,6 +83,14 @@ export class RenderService {
     ]);
 
     const font = customization.font;
+    // El color/contorno viene de la plantilla del producto, no de la fuente.
+    const style: TextStyle = {
+      fontName: font.name,
+      fillColor: customization.fillColor,
+      strokeColor: customization.strokeColor,
+      strokeWidthPx: customization.strokeWidthPx,
+      letterSpacingPx: customization.letterSpacingPx,
+    };
     const children: SatoriNode[] = [
       {
         type: 'img',
@@ -87,12 +105,12 @@ export class RenderService {
 
     if (customization.enableName && input.playerName) {
       children.push(
-        ...this.textLayers(input.playerName.toUpperCase(), customization.namePrintArea, CANVAS_WIDTH, canvasHeight, font),
+        ...this.textLayers(input.playerName.toUpperCase(), customization.namePrintArea, CANVAS_WIDTH, canvasHeight, style),
       );
     }
     if (customization.enableNumber && input.playerNumber !== undefined) {
       children.push(
-        ...this.textLayers(String(input.playerNumber), customization.numberPrintArea, CANVAS_WIDTH, canvasHeight, font),
+        ...this.textLayers(String(input.playerNumber), customization.numberPrintArea, CANVAS_WIDTH, canvasHeight, style),
       );
     }
 
@@ -137,7 +155,7 @@ export class RenderService {
     area: PrintArea,
     canvasWidth: number,
     canvasHeight: number,
-    font: LeagueFontDto,
+    style: TextStyle,
   ): SatoriNode[] {
     const box = resolvePrintArea(area, canvasWidth, canvasHeight);
     const fontSize = computeFontSizeForBox(text, box);
@@ -151,10 +169,10 @@ export class RenderService {
       alignItems: 'center' as const,
       justifyContent,
       fontSize,
-      fontFamily: font.name,
+      fontFamily: style.fontName,
       // Satori no tolera bien valores `undefined` en el estilo (intenta parsearlos
       // igual); se omiten las claves en vez de dejarlas en undefined.
-      ...(font.letterSpacingPx ? { letterSpacing: `${font.letterSpacingPx}px` } : {}),
+      ...(style.letterSpacingPx ? { letterSpacing: `${style.letterSpacingPx}px` } : {}),
       ...(box.rotation ? { transform: `rotate(${box.rotation}deg)` } : {}),
     };
 
@@ -163,16 +181,16 @@ export class RenderService {
     // Contorno "falso": el mismo texto duplicado en el color de borde, desplazado
     // en las cuatro diagonales, detrás del texto de relleno. Satori no soporta
     // text-stroke real, pero sí posición + color, que alcanza para este efecto.
-    if (font.strokeColor && font.strokeWidthPx > 0) {
+    if (style.strokeColor && style.strokeWidthPx > 0) {
       for (const [dx, dy] of STROKE_OFFSETS) {
         layers.push({
           type: 'div',
           props: {
             style: {
               ...baseStyle,
-              left: box.left + dx * font.strokeWidthPx,
-              top: box.top + dy * font.strokeWidthPx,
-              color: font.strokeColor,
+              left: box.left + dx * style.strokeWidthPx,
+              top: box.top + dy * style.strokeWidthPx,
+              color: style.strokeColor,
             },
             children: text,
           },
@@ -183,7 +201,7 @@ export class RenderService {
     layers.push({
       type: 'div',
       props: {
-        style: { ...baseStyle, left: box.left, top: box.top, color: font.fillColor },
+        style: { ...baseStyle, left: box.left, top: box.top, color: style.fillColor },
         children: text,
       },
     });

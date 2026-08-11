@@ -247,6 +247,11 @@ async function seedCustomization(productId: string, leagueId: string) {
       nameExtraCents: 150000,
       numberExtraCents: 100000,
       fontId: font.id,
+      // El estilo del estampado vive en la plantilla (no en la fuente).
+      fillColor: '#FFFFFF',
+      strokeColor: '#0B1F4D',
+      strokeWidthPx: 3,
+      letterSpacingPx: 2,
       namePrintArea: { x: 0.3, y: 0.22, width: 0.4, height: 0.07, rotation: 0, align: 'center' },
       numberPrintArea: { x: 0.35, y: 0.32, width: 0.3, height: 0.16, rotation: 0, align: 'center' },
     },
