@@ -12,6 +12,8 @@ const isLocalApi = ['localhost', '127.0.0.1', '::1'].includes(apiUrl.hostname);
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@tienda/ui'],
+  // Oculta el indicador de desarrollo de Next (la "N" flotante). Sólo aparece en dev.
+  devIndicators: false,
   images: {
     remotePatterns: [
       {

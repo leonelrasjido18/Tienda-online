@@ -5,10 +5,12 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TemplatesService } from '../customization/templates.service';
 
-// Catálogo boutique (una sola clienta, cientos de productos, no miles): se resuelve
-// el ordenamiento por precio en memoria sobre un lote acotado en vez de duplicar el
-// armado del WHERE en SQL crudo para un ORDER BY agregado.
-const MAX_SORTABLE_PRODUCTS = 500;
+// El ordenamiento por precio (mínimo entre variantes) se resuelve en memoria sobre
+// un lote acotado, en vez de armar un ORDER BY agregado en SQL crudo. El tope cubre
+// catálogos de hasta ~2000 productos con holgura (1000 productos ≈ pocos MB, ordena
+// en milisegundos). Si el catálogo creciera más allá de eso, conviene denormalizar
+// un `minPriceCents` indexado en Product y ordenar directo en la base.
+const MAX_SORTABLE_PRODUCTS = 2000;
 
 // El talle es la única opción que el storefront muestra como faceta propia; se asume
 // que la clienta la nombra "Talle" al cargar el producto (documentado en el panel).

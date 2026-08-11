@@ -33,7 +33,7 @@ export async function SiteFooter() {
 
   return (
     <footer className="mt-auto border-t border-border bg-card">
-      <div className="mx-auto max-w-6xl px-4 py-12">
+      <div className="mx-auto max-w-[1600px] px-4 py-12">
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div>
@@ -115,7 +115,7 @@ export async function SiteFooter() {
           <p className="text-xs text-muted-foreground">
             © {new Date().getFullYear()} {siteConfig.name}. Todos los derechos reservados.
           </p>
-          <div className="flex gap-4">
+          <div className="flex items-center gap-4">
             {LEGAL_LINKS.map((link) => (
               <Link
                 key={link.href}
@@ -125,6 +125,14 @@ export async function SiteFooter() {
                 {link.label}
               </Link>
             ))}
+            {/* Acceso al panel de gestión (dueña/staff). En producción esta URL
+                apunta al mismo dominio, ej. /panel; en dev, al puerto del admin. */}
+            <a
+              href={process.env.NEXT_PUBLIC_ADMIN_URL ?? 'http://localhost:3002'}
+              className="text-xs text-muted-foreground/70 transition-colors hover:text-foreground"
+            >
+              Panel de gestión
+            </a>
           </div>
         </div>
       </div>

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Menu, Search, ShoppingBag, X } from 'lucide-react';
+import { Heart, Menu, Search, ShoppingBag, User, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, ThemeToggle } from '@tienda/ui';
 
 import { useCart } from '@/lib/cart-context';
@@ -12,6 +12,7 @@ import { Logo } from './logo';
 import { MiniCart } from './mini-cart';
 
 const NAV_LINKS = [
+  { href: '/', label: 'Inicio' },
   { href: '/productos', label: 'Productos' },
   { href: '/como-funciona', label: 'Cómo funciona' },
   { href: '/guia-de-talles', label: 'Guía de talles' },
@@ -40,7 +41,7 @@ export function SiteHeader() {
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-3">
           {/* Mobile menu button */}
           <button
             type="button"
@@ -96,6 +97,24 @@ export function SiteHeader() {
             </button>
 
             <ThemeToggle />
+
+            {/* Cuenta: ingresar o registrarse (ambas viven en /login). */}
+            <Link
+              href="/login"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              aria-label="Ingresar o registrarte"
+            >
+              <User className="h-5 w-5" />
+            </Link>
+
+            {/* Favoritos */}
+            <Link
+              href="/mi-cuenta"
+              className="hidden h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:inline-flex"
+              aria-label="Favoritos"
+            >
+              <Heart className="h-5 w-5" />
+            </Link>
 
             {/* Cart */}
             <button
@@ -156,6 +175,23 @@ export function SiteHeader() {
                 {link.label}
               </Link>
             ))}
+
+            <div className="my-2 border-t border-border" />
+
+            <Link
+              href="/login"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors hover:bg-secondary"
+            >
+              <User className="h-4 w-4" /> Ingresar
+            </Link>
+            <Link
+              href="/login?mode=register"
+              onClick={() => setMobileMenuOpen(false)}
+              className="rounded-md px-3 py-2.5 text-sm font-medium text-accent transition-colors hover:bg-secondary"
+            >
+              Crear cuenta
+            </Link>
           </nav>
         </SheetContent>
       </Sheet>

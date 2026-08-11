@@ -3,7 +3,7 @@ import { Skeleton } from '@tienda/ui';
 export function ProductRailSkeleton({ title }: { title: string }) {
   return (
     <section className="py-8">
-      <div className="mx-auto max-w-6xl px-4">
+      <div className="mx-auto max-w-[1600px] px-4">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-bold tracking-tight">{title}</h2>
           <Skeleton className="h-4 w-20" />

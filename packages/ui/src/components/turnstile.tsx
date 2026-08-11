@@ -29,8 +29,11 @@ declare global {
   }
 }
 
+/** Clave de sitio de prueba de Cloudflare: si es esta (o falta), el CAPTCHA no aplica. */
+const TEST_SITE_KEY = '1x00000000000000000000AA';
+
 export function Turnstile({
-  siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA',
+  siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || TEST_SITE_KEY,
   onSuccess,
   onError,
   onExpire,
@@ -39,7 +42,17 @@ export function Turnstile({
   const containerRef = useRef<HTMLDivElement>(null);
   const [widgetId, setWidgetId] = useState<string | null>(null);
 
+  // Sólo se muestra el widget con una clave real. Sin ella (dev), se auto-aprueba
+  // con un token centinela para no bloquear el formulario ni mostrar el cartel de
+  // "solo para pruebas"; el backend tampoco valida cuando la clave es de prueba.
+  const enabled = siteKey !== TEST_SITE_KEY && siteKey !== '';
+
   useEffect(() => {
+    if (!enabled) {
+      onSuccess('disabled');
+      return;
+    }
+
     const scriptId = 'cloudflare-turnstile-script';
     let script = document.getElementById(scriptId) as HTMLScriptElement | null;
 
@@ -97,7 +110,10 @@ export function Turnstile({
         }
       }
     };
+    // `enabled` se deriva de `siteKey`, así que con esa dependencia alcanza.
   }, [siteKey]);
+
+  if (!enabled) return null;
 
   return <div ref={containerRef} className={className} />;
 }

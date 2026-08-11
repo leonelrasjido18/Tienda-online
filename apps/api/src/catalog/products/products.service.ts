@@ -62,7 +62,14 @@ export class ProductsService {
           league: true,
           team: true,
           images: { orderBy: { position: 'asc' }, take: 1 },
-          variants: { select: { priceCents: true, inventory: true } },
+          variants: {
+            orderBy: { position: 'asc' },
+            select: {
+              priceCents: true,
+              inventory: true,
+              optionValues: { select: { value: { select: { value: true } } } },
+            },
+          },
         },
       }),
       this.prisma.product.count({ where }),
@@ -81,6 +88,11 @@ export class ProductsService {
         coverImageUrl: p.images[0]?.url ?? null,
         variantCount: p.variants.length,
         totalStock: p.variants.reduce((sum, v) => sum + (v.inventory?.quantity ?? 0), 0),
+        // Desglose de stock por talle (o combinación) para mostrarlo en la lista.
+        stockByVariant: p.variants.map((v) => ({
+          label: v.optionValues.map((ov) => ov.value.value).join(' / ') || 'Único',
+          quantity: v.inventory?.quantity ?? 0,
+        })),
         minPriceCents: p.variants.length ? Math.min(...p.variants.map((v) => v.priceCents)) : null,
       })),
       page: filters.page,
@@ -182,7 +194,9 @@ export class ProductsService {
               priceCents: 0,
               position: product.variants.length + index,
               optionValues: { create: combo.optionValueIds.map((valueId) => ({ valueId })) },
-              inventory: { create: { quantity: 0 } },
+              // Si el producto admite encargo (PREORDER o BOTH) las variantes nacen
+              // con "por encargo" tildado; igual se les puede cargar stock local.
+              inventory: { create: { quantity: 0, allowPreorder: product.fulfillmentMode !== 'IN_STOCK' } },
             },
           }),
         ),

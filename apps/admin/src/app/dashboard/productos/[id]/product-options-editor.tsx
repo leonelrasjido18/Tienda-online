@@ -14,9 +14,12 @@ interface OptionDraft {
   valuesText: string;
 }
 
+/** Talles por defecto para un producto nuevo (se pueden editar antes de guardar). */
+const DEFAULT_SIZES = 'S, M, L, XL, XXL';
+
 function toDrafts(options: ProductDetailDto['options']): OptionDraft[] {
   if (options.length === 0) {
-    return [{ name: 'Talle', valuesText: '' }];
+    return [{ name: 'Talle', valuesText: DEFAULT_SIZES }];
   }
   return options.map((o) => ({ name: o.name, valuesText: o.values.map((v) => v.value).join(', ') }));
 }
@@ -88,7 +91,7 @@ export function ProductOptionsEditor({
             <div className="space-y-2">
               <Label>Valores (separados por coma)</Label>
               <Input
-                placeholder="S, M, L, XL"
+                placeholder={DEFAULT_SIZES}
                 value={draft.valuesText}
                 onChange={(e) =>
                   setDrafts((ds) => ds.map((d, i) => (i === index ? { ...d, valuesText: e.target.value } : d)))

@@ -2,19 +2,26 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.validation';
 
+/** Clave secreta de prueba de Cloudflare (deja pasar todo): equivale a "sin configurar". */
+const TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
+
 @Injectable()
 export class TurnstileService {
   private readonly logger = new Logger(TurnstileService.name);
   private readonly secretKey: string;
   private readonly isTest: boolean;
+  private readonly enabled: boolean;
 
   constructor(private readonly config: ConfigService<Env, true>) {
     this.secretKey = this.config.get('TURNSTILE_SECRET_KEY');
     this.isTest = this.config.get('NODE_ENV') === 'test';
+    // Sólo se exige CAPTCHA con una clave real: con la de prueba (o vacía) no se
+    // valida, así en desarrollo no aparece el widget de "solo para pruebas".
+    this.enabled = this.secretKey !== '' && this.secretKey !== TEST_SECRET_KEY;
   }
 
   async verify(token: string | undefined, ip?: string): Promise<boolean> {
-    if (this.isTest) {
+    if (this.isTest || !this.enabled) {
       return true;
     }
 

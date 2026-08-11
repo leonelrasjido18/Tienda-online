@@ -89,7 +89,7 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
   ].filter(Boolean).length;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <div className="mx-auto max-w-[1600px] px-4 py-8">
       {/* Header bar with Search and Mobile Filter Trigger */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <form method="GET" className="flex flex-1 max-w-md gap-2">

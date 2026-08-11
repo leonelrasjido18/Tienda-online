@@ -1,11 +1,12 @@
 'use client';
 
-import { Badge, buttonVariants, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@tienda/ui';
+import { Badge, Button, buttonVariants, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@tienda/ui';
 import { formatCentsAsArs, type ProductStatus } from '@tienda/shared';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { ApiError } from '@/lib/api';
 import { resolveImageUrl } from '@/lib/media';
 import { useApi } from '@/lib/use-api';
 
@@ -21,6 +22,7 @@ interface AdminProductListItem {
   coverImageUrl: string | null;
   variantCount: number;
   totalStock: number;
+  stockByVariant: { label: string; quantity: number }[];
   minPriceCents: number | null;
 }
 
@@ -40,12 +42,19 @@ const STATUS_LABELS: Record<ProductStatus, string> = {
 
 export default function ProductsPage() {
   const api = useApi();
+  const queryClient = useQueryClient();
   const [q, setQ] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'products', q],
     queryFn: () =>
       api<AdminProductListResponse>(`/admin/products?${new URLSearchParams(q ? { q } : {}).toString()}`),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api(`/admin/products/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['admin', 'products'] }),
+    onError: (err) => alert(err instanceof ApiError ? err.message : 'No se pudo eliminar el producto'),
   });
 
   return (
@@ -74,19 +83,20 @@ export default function ProductsPage() {
               <TableHead>Variantes</TableHead>
               <TableHead>Stock</TableHead>
               <TableHead>Precio desde</TableHead>
+              <TableHead className="w-40 text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   Cargando…
                 </TableCell>
               </TableRow>
             )}
             {data?.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   Todavía no hay productos cargados.
                 </TableCell>
               </TableRow>
@@ -115,9 +125,51 @@ export default function ProductsPage() {
                   {[product.leagueName, product.teamName].filter(Boolean).join(' · ') || '—'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">{product.variantCount}</TableCell>
-                <TableCell className="text-muted-foreground">{product.totalStock}</TableCell>
+                <TableCell>
+                  {product.stockByVariant.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {product.stockByVariant.map((v, i) => (
+                        <span
+                          key={i}
+                          className={
+                            'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs ' +
+                            (v.quantity > 0
+                              ? 'border-border text-foreground'
+                              : 'border-destructive/40 text-destructive')
+                          }
+                          title={`${v.label}: ${v.quantity} en stock`}
+                        >
+                          <span className="font-medium">{v.label}</span>
+                          <span>{v.quantity}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {product.minPriceCents !== null ? formatCentsAsArs(product.minPriceCents) : '—'}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <Link href={`/dashboard/productos/${product.id}`} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+                      Editar
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => {
+                        if (confirm(`¿Eliminar el producto "${product.name}"? Esta acción no se puede deshacer.`)) {
+                          deleteMutation.mutate(product.id);
+                        }
+                      }}
+                    >
+                      Eliminar
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

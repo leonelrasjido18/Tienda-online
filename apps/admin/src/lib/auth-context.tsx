@@ -16,6 +16,8 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string, turnstileToken?: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Renueva el access token con la cookie de refresh. Devuelve el nuevo token o null. */
+  refresh: () => Promise<string | null>;
 }
 
 interface LoginResponse {
@@ -32,23 +34,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     status: 'loading',
   });
 
-  // Al montar, intenta renovar la sesión con la cookie httpOnly de refresh.
-  // Si no hay una válida, queda "unauthenticated" y el layout protegido redirige a /login.
+  // Renueva el access token con la cookie httpOnly de refresh. Se usa al montar y
+  // también cuando una petición devuelve 401 (el access token es de vida corta).
+  const refresh = useCallback(async (): Promise<string | null> => {
+    try {
+      const res = await apiFetch<LoginResponse>('/auth/refresh', { method: 'POST' });
+      setState({ user: res.user, accessToken: res.accessToken, status: 'authenticated' });
+      return res.accessToken;
+    } catch {
+      setState({ user: null, accessToken: null, status: 'unauthenticated' });
+      return null;
+    }
+  }, []);
+
+  // Al montar, intenta renovar la sesión con la cookie httpOnly de refresh. Se hace
+  // inline (no vía `refresh`) para que el setState quede dentro del callback de la
+  // promesa y no dispare la regla de setState síncrono en efecto.
   useEffect(() => {
     let cancelled = false;
-
     apiFetch<LoginResponse>('/auth/refresh', { method: 'POST' })
       .then((res) => {
-        if (!cancelled) {
-          setState({ user: res.user, accessToken: res.accessToken, status: 'authenticated' });
-        }
+        if (!cancelled) setState({ user: res.user, accessToken: res.accessToken, status: 'authenticated' });
       })
       .catch(() => {
-        if (!cancelled) {
-          setState({ user: null, accessToken: null, status: 'unauthenticated' });
-        }
+        if (!cancelled) setState({ user: null, accessToken: null, status: 'unauthenticated' });
       });
-
     return () => {
       cancelled = true;
     };
@@ -69,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ ...state, login, logout, refresh }}>{children}</AuthContext.Provider>
   );
 }
 
