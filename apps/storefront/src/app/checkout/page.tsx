@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  applyDiscountToPlan,
   calculatePaymentPlan,
   formatCentsAsArs,
   PAYMENT_METHOD_LABELS,
@@ -9,7 +10,7 @@ import {
   type PublicStoreSettingsDto,
   type ResolvedFulfillment,
 } from '@tienda/shared';
-import { Button, Input, Label, Card, CardContent } from '@tienda/ui';
+import { Button, Input, Label, Card, CardContent, Turnstile } from '@tienda/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Truck, Store, CreditCard, Landmark, CheckCircle2, ArrowRight } from 'lucide-react';
@@ -57,6 +58,12 @@ export default function CheckoutPage() {
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountCents: number; freeShipping: boolean } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +92,14 @@ export default function CheckoutPage() {
     return calculatePaymentPlan(lines, depositPercent);
   }, [cart, depositPercent]);
 
+  // El plan mostrado refleja el descuento del cupón. El servidor lo revalida y
+  // recalcula igual al confirmar: esto es sólo la vista previa.
+  const displayPlan = useMemo(() => {
+    if (!plan) return null;
+    if (!appliedCoupon) return plan;
+    return applyDiscountToPlan(plan, appliedCoupon.discountCents, depositPercent);
+  }, [plan, appliedCoupon, depositPercent]);
+
   if (isLoading) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
@@ -103,6 +118,31 @@ export default function CheckoutPage() {
         </Button>
       </div>
     );
+  }
+
+  async function handleApplyCoupon() {
+    const code = couponInput.trim();
+    if (!code || !plan) return;
+    setCouponError(null);
+    setIsApplyingCoupon(true);
+    try {
+      const res = await clientFetch<{ code: string; discountCents: number; freeShipping: boolean }>('/coupons/validate', {
+        method: 'POST',
+        body: JSON.stringify({ code, subtotalCents: plan.subtotalCents }),
+      });
+      setAppliedCoupon({ code: res.code, discountCents: res.discountCents, freeShipping: res.freeShipping });
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponError(err instanceof Error ? err.message : 'No pudimos aplicar el cupón.');
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  }
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null);
+    setCouponInput('');
+    setCouponError(null);
   }
 
   async function handleSubmit() {
@@ -125,11 +165,13 @@ export default function CheckoutPage() {
 
       const response = await clientFetch<CreateOrderResponse>('/checkout', {
         method: 'POST',
+        headers: turnstileToken ? { 'x-turnstile-token': turnstileToken } : undefined,
         body: JSON.stringify({
           contact: { name, email, phone: phone || undefined },
           shipping,
           paymentMethod,
           notes: notes || undefined,
+          couponCode: appliedCoupon?.code,
         }),
       });
 
@@ -387,36 +429,93 @@ export default function CheckoutPage() {
       )}
 
       {/* Step 3: Payment */}
-      {step === 'payment' && plan && (
+      {step === 'payment' && plan && displayPlan && (
         <Card className="border border-border">
           <CardContent className="p-6 space-y-6">
             <h2 className="text-lg font-bold text-foreground">Resumen y Forma de Pago</h2>
+
+            {/* Cupón de descuento */}
+            <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+              <span className="text-sm font-semibold text-foreground">¿Tenés un cupón?</span>
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-accent">{appliedCoupon.code}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {appliedCoupon.freeShipping
+                        ? 'Envío gratis al abonar el saldo'
+                        : `Descuento de ${formatCentsAsArs(appliedCoupon.discountCents)}`}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    className="text-xs font-semibold text-muted-foreground underline hover:text-foreground"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    placeholder="CÓDIGO"
+                    className="uppercase"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleApplyCoupon();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleApplyCoupon}
+                    disabled={isApplyingCoupon || !couponInput.trim()}
+                  >
+                    {isApplyingCoupon ? 'Aplicando…' : 'Aplicar'}
+                  </Button>
+                </div>
+              )}
+              {couponError && <p className="text-xs text-destructive">{couponError}</p>}
+            </div>
 
             {/* Payment Summary Box */}
             <div className="rounded-xl border border-border bg-card p-4 space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal del carrito</span>
-                <span className="font-semibold">{formatCentsAsArs(plan.subtotalCents)}</span>
+                <span className="font-semibold">{formatCentsAsArs(displayPlan.subtotalCents)}</span>
               </div>
 
-              {plan.plan === 'DEPOSIT_BALANCE' ? (
+              {appliedCoupon && appliedCoupon.discountCents > 0 && (
+                <div className="flex justify-between text-sm text-accent">
+                  <span>Descuento ({appliedCoupon.code})</span>
+                  <span className="font-semibold">−{formatCentsAsArs(appliedCoupon.discountCents)}</span>
+                </div>
+              )}
+
+              {displayPlan.plan === 'DEPOSIT_BALANCE' ? (
                 <>
                   <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border">
                     <span>Seña a abonar hoy (50%)</span>
-                    <span className="text-accent">{formatCentsAsArs(plan.dueTodayCents)}</span>
+                    <span className="text-accent">{formatCentsAsArs(displayPlan.dueTodayCents)}</span>
                   </div>
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>Saldo restante (al llegar a Arg)</span>
-                    <span>{formatCentsAsArs(plan.balanceCents ?? 0)}</span>
+                    <span>{formatCentsAsArs(displayPlan.balanceCents ?? 0)}</span>
                   </div>
                   <p className="pt-2 text-[11px] text-muted-foreground leading-relaxed">
-                    El costo de envío se calculará y abonará junto con el saldo cuando recibamos el lote en nuestro depósito.
+                    {appliedCoupon?.freeShipping
+                      ? 'El envío es gratis con tu cupón; el saldo se abona cuando recibamos el lote en nuestro depósito.'
+                      : 'El costo de envío se calculará y abonará junto con el saldo cuando recibamos el lote en nuestro depósito.'}
                   </p>
                 </>
               ) : (
                 <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border">
                   <span>Total a abonar hoy</span>
-                  <span>{formatCentsAsArs(plan.dueTodayCents)}</span>
+                  <span>{formatCentsAsArs(displayPlan.dueTodayCents)}</span>
                 </div>
               )}
             </div>
@@ -469,6 +568,13 @@ export default function CheckoutPage() {
                 onChange={(e) => setNotes(e.target.value)}
               />
             </div>
+
+            <Turnstile
+              onSuccess={setTurnstileToken}
+              onExpire={() => setTurnstileToken(null)}
+              onError={() => setTurnstileToken(null)}
+              className="flex justify-center py-2"
+            />
 
             {submitError && (
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">

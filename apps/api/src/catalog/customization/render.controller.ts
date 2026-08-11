@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, NotFoundException, Param, Post, Res } from '@nestjs/common';
 import { buildCustomizationInputSchema, customizationInputSchema } from '@tienda/shared';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 
 import { Public } from '../../auth/decorators/public.decorator';
@@ -17,6 +18,7 @@ export class RenderController {
   ) {}
 
   @Post('render')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async render(@Param('slug') slug: string, @Body() body: unknown, @Res() res: Response) {
     const product = await this.prisma.product.findFirst({ where: { slug, status: 'ACTIVE' } });
     if (!product) {

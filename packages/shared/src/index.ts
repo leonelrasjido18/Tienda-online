@@ -22,6 +22,7 @@ export * from './schemas/customization/customization-input.schema';
 
 export * from './schemas/sales/cart.schema';
 export * from './schemas/sales/order.schema';
+export * from './schemas/sales/customer-auth.schema';
 export * from './schemas/sales/settings.schema';
 
 export * from './schemas/import/batch.schema';

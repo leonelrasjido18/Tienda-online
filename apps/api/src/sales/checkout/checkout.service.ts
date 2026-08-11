@@ -1,15 +1,18 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { randomBytes } from 'node:crypto';
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  applyDiscountToPlan,
   calculatePaymentPlan,
+  formatCentsAsArs,
   formatOrderNumber,
   type CartCustomizationDraft,
   type CreateOrderInput,
   type CreateOrderResponse,
   type PaymentPlanLineItem,
   type ResolvedFulfillment,
+  type CheckoutPaymentMethod,
 } from '@tienda/shared';
 import type { Prisma } from '@prisma/client';
 import type { Queue } from 'bullmq';
@@ -120,6 +123,19 @@ export class CheckoutService {
       }));
       const plan = calculatePaymentPlan(planLines, storeSettings.defaultDepositPercent);
 
+      // Cupón: se revalida y consume del lado del servidor SIEMPRE, con el subtotal
+      // recalculado acá. Nunca se confía en el descuento que pudo mostrar el cliente.
+      let couponId: string | null = null;
+      let discountCents = 0;
+      let effectivePlan = plan;
+      if (input.couponCode) {
+        const applied = await this.resolveAndConsumeCoupon(tx, input.couponCode, plan.subtotalCents);
+        couponId = applied.couponId;
+        discountCents = applied.discountCents;
+        effectivePlan = applyDiscountToPlan(plan, discountCents, storeSettings.defaultDepositPercent);
+      }
+      const netTotalCents = plan.subtotalCents - discountCents;
+
       // La transferencia da más tiempo: el cliente tiene que ir al banco.
       const reservationMinutes =
         input.paymentMethod === 'bank_transfer'
@@ -148,11 +164,13 @@ export class CheckoutService {
           contactEmail: input.contact.email,
           contactPhone: input.contact.phone ?? null,
           ...shippingFields,
-          paymentPlan: plan.plan,
+          paymentPlan: effectivePlan.plan,
           subtotalCents: plan.subtotalCents,
-          depositCents: plan.depositCents,
-          balanceCents: plan.balanceCents,
-          totalCents: plan.subtotalCents,
+          discountCents,
+          couponId,
+          depositCents: effectivePlan.depositCents,
+          balanceCents: effectivePlan.balanceCents,
+          totalCents: netTotalCents,
           notes: input.notes ?? null,
           expiresAt,
           items: {
@@ -184,9 +202,9 @@ export class CheckoutService {
           events: { create: { type: 'created', message: 'Pedido creado' } },
           payments: {
             create: {
-              kind: plan.plan === 'FULL' ? 'FULL' : 'DEPOSIT',
+              kind: effectivePlan.plan === 'FULL' ? 'FULL' : 'DEPOSIT',
               provider: input.paymentMethod,
-              amountCents: plan.dueTodayCents,
+              amountCents: effectivePlan.dueTodayCents,
             },
           },
         },
@@ -258,6 +276,181 @@ export class CheckoutService {
       bankTransferInstructions: input.paymentMethod === 'bank_transfer' ? storeSettings.bankTransferInstructions : null,
       dueTodayCents: payment.amountCents,
     };
+  }
+
+  async retryPayment(orderToken: string, paymentMethod: CheckoutPaymentMethod): Promise<CreateOrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { publicToken: orderToken },
+      include: { payments: { orderBy: { createdAt: 'asc' } } },
+    });
+
+    if (!order) {
+      throw new NotFoundException('El pedido no existe');
+    }
+
+    const storeSettings = await this.settings.get();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${order.id} FOR UPDATE`;
+
+      const freshOrder = await tx.order.findUniqueOrThrow({
+        where: { id: order.id },
+        include: { payments: true },
+      });
+
+      if (freshOrder.financialStatus !== 'PENDING') {
+        throw new BadRequestException(`El pedido no puede ser pagado porque su estado actual es ${freshOrder.financialStatus}`);
+      }
+
+      if (freshOrder.expiresAt && freshOrder.expiresAt < new Date()) {
+        throw new BadRequestException('El pedido ha expirado. Por favor, realiza una nueva compra.');
+      }
+
+      // Cancel in-flight pending payments to avoid duplicate payment creations on same kind
+      await tx.payment.updateMany({
+        where: { orderId: order.id, kind: { in: ['DEPOSIT', 'FULL'] }, status: 'PENDING' },
+        data: { status: 'CANCELLED' },
+      });
+
+      // Update reservation expiration time if they chose bank_transfer vs card
+      let expiresAt = freshOrder.expiresAt;
+      if (paymentMethod === 'bank_transfer') {
+        const reservationMinutes = this.config.get('BANK_TRANSFER_RESERVATION_TTL_HOURS') * 60;
+        expiresAt = new Date(Date.now() + reservationMinutes * 60_000);
+      } else {
+        const reservationMinutes = this.config.get('CHECKOUT_RESERVATION_TTL_MINUTES');
+        expiresAt = new Date(Date.now() + reservationMinutes * 60_000);
+      }
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: { expiresAt },
+      });
+
+      const paymentKind = freshOrder.paymentPlan === 'FULL' ? 'FULL' : 'DEPOSIT';
+      const dueTodayCents = freshOrder.paymentPlan === 'DEPOSIT_BALANCE' && freshOrder.depositCents
+        ? freshOrder.depositCents
+        : freshOrder.subtotalCents;
+
+      const createdPayment = await tx.payment.create({
+        data: {
+          orderId: order.id,
+          kind: paymentKind,
+          provider: paymentMethod,
+          amountCents: dueTodayCents,
+        },
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: 'payment_retry_started',
+          message: `Intento de reintento de pago iniciado con ${paymentMethod}`,
+        },
+      });
+
+      return { payment: createdPayment, expiresAt };
+    });
+
+    const payment = result.payment;
+    let redirectUrl: string | null = null;
+
+    try {
+      if (paymentMethod !== 'bank_transfer') {
+        const provider = this.payments.active();
+        const checkout = await provider.createCheckout({
+          paymentId: payment.id,
+          orderId: order.id,
+          orderToken: order.publicToken,
+          orderNumber: order.number,
+          kindLabel: payment.kind === 'FULL' ? 'Pago total (reintento)' : 'Seña (reintento)',
+          amountCents: payment.amountCents,
+        });
+        redirectUrl = checkout.redirectUrl;
+        await this.prisma.payment.update({
+          where: { id: payment.id },
+          data: { provider: provider.name, rawPayload: { providerRef: checkout.providerRef } },
+        });
+      }
+    } catch (error) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: 'REJECTED' },
+      });
+      throw error;
+    }
+
+    const job = await this.reservationQueue.getJob(order.id);
+    if (job) {
+      await job.remove().catch(() => undefined);
+    }
+    await this.reservationQueue.add(
+      'expire',
+      { orderId: order.id },
+      { delay: Math.max(0, result.expiresAt ? result.expiresAt.getTime() - Date.now() : 0), jobId: order.id },
+    );
+
+    return {
+      orderId: order.id,
+      orderToken: order.publicToken,
+      displayNumber: formatOrderNumber(order.number),
+      paymentMethod,
+      redirectUrl,
+      bankTransferInstructions: paymentMethod === 'bank_transfer' ? storeSettings.bankTransferInstructions : null,
+      dueTodayCents: payment.amountCents,
+    };
+  }
+
+  /**
+   * Revalida el cupón contra la base y lo consume dentro de la transacción del
+   * checkout. Toma un lock `FOR UPDATE` sobre la fila para que dos checkouts
+   * simultáneos no puedan pasarse del `maxUses`. Devuelve el descuento sobre el
+   * subtotal; el envío gratis no descuenta acá (se resuelve al cotizar el envío),
+   * sólo deja el cupón asociado para que `balance.service` lo honre.
+   */
+  private async resolveAndConsumeCoupon(
+    tx: Prisma.TransactionClient,
+    code: string,
+    subtotalCents: number,
+  ): Promise<{ couponId: string; discountCents: number }> {
+    const normalized = code.toUpperCase().trim();
+    const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM coupons WHERE code = ${normalized} FOR UPDATE`;
+    const row = locked[0];
+    if (!row) {
+      throw new BadRequestException('El código de cupón no existe.');
+    }
+
+    const coupon = await tx.coupon.findUniqueOrThrow({ where: { id: row.id } });
+    if (!coupon.isActive) {
+      throw new BadRequestException('Este cupón ya no está vigente.');
+    }
+    if (coupon.expiresAt && coupon.expiresAt < new Date()) {
+      throw new BadRequestException('Este cupón ha expirado.');
+    }
+    if (coupon.maxUses !== null && coupon.uses >= coupon.maxUses) {
+      throw new BadRequestException('Este cupón ya alcanzó el límite de usos.');
+    }
+    if (subtotalCents < coupon.minPurchaseCents) {
+      throw new BadRequestException(
+        `El monto mínimo de compra para este cupón es ${formatCentsAsArs(coupon.minPurchaseCents)}.`,
+      );
+    }
+
+    let discountCents = 0;
+    switch (coupon.type) {
+      case 'PERCENTAGE':
+        discountCents = Math.round((subtotalCents * coupon.value) / 100);
+        break;
+      case 'FIXED_AMOUNT':
+        discountCents = Math.min(coupon.value, subtotalCents);
+        break;
+      case 'FREE_SHIPPING':
+        discountCents = 0;
+        break;
+    }
+
+    await tx.coupon.update({ where: { id: coupon.id }, data: { uses: { increment: 1 } } });
+    return { couponId: coupon.id, discountCents };
   }
 
   private async prepareLines(items: CartItemWithRelations[]): Promise<PreparedLine[]> {

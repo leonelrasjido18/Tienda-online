@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { CmsModule } from './cms/cms.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import type { Env } from './config/env.validation';
 import { validateEnv } from './config/env.validation';
@@ -39,6 +40,7 @@ import { ShippingModule } from './shipping/shipping.module';
     SalesModule,
     ShippingModule,
     ImportModule,
+    CmsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

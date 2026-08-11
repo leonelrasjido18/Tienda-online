@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 
 import { CustomizationModule } from '../../catalog/customization/customization.module';
 import { UploadsModule } from '../../catalog/uploads/uploads.module';
+import { TurnstileModule } from '../../common/turnstile/turnstile.module';
 import { CartModule } from '../cart/cart.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -22,6 +23,7 @@ import { CheckoutService } from './checkout.service';
     UploadsModule,
     PaymentsModule,
     NotificationsModule,
+    TurnstileModule,
   ],
   controllers: [CheckoutController],
   providers: [CheckoutService],

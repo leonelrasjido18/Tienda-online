@@ -13,3 +13,5 @@ export * from './components/card';
 export * from './components/separator';
 export * from './components/theme-toggle';
 export * from './components/theme-script';
+export * from './components/turnstile';
+

@@ -21,6 +21,9 @@ const NAV_LINKS = [
   { href: '/dashboard/tipografias', label: 'Tipografías' },
   { href: '/dashboard/parches', label: 'Parches' },
   { href: '/dashboard/envios', label: 'Envíos' },
+  { href: '/dashboard/paginas', label: 'Páginas' },
+  { href: '/dashboard/preguntas', label: 'FAQs' },
+  { href: '/dashboard/cupones', label: 'Cupones' },
   { href: '/dashboard/ajustes', label: 'Ajustes' },
 ];
 

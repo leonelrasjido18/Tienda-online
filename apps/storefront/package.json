@@ -6,11 +6,14 @@
     "dev": "next dev --port 3000 --webpack",
     "build": "next build",
     "start": "next start --port 3000",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@tienda/shared": "workspace:*",
     "@tienda/ui": "workspace:*",
+    "dompurify": "^3.4.13",
+    "isomorphic-dompurify": "^3.22.0",
     "lucide-react": "^0.469.0",
     "next": "16.3.0",
     "react": "19.2.8",
@@ -18,6 +21,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/dompurify": "^3.2.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

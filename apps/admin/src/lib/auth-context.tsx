@@ -14,7 +14,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, turnstileToken?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -54,9 +54,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, turnstileToken?: string) => {
     const res = await apiFetch<LoginResponse>('/auth/login', {
       method: 'POST',
+      headers: turnstileToken ? { 'x-turnstile-token': turnstileToken } : undefined,
       body: JSON.stringify({ email, password }),
     });
     setState({ user: res.user, accessToken: res.accessToken, status: 'authenticated' });

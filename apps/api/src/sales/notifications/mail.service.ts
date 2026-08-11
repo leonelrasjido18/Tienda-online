@@ -112,6 +112,34 @@ export class MailService {
     });
   }
 
+  /** Código para verificar el email al registrarse. */
+  async sendEmailVerificationCode(email: string, code: string) {
+    await this.send({
+      to: email,
+      subject: `Verificá tu email: ${code}`,
+      html: `
+        <p>Hola,</p>
+        <p>Usá este código para verificar tu email y activar tu cuenta:</p>
+        <p style="font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; margin: 20px 0;">${code}</p>
+        <p>Este código expira en 30 minutos. Si no creaste una cuenta, ignorá este mensaje.</p>
+      `,
+    });
+  }
+
+  /** Código para restablecer la contraseña. */
+  async sendPasswordResetCode(email: string, code: string) {
+    await this.send({
+      to: email,
+      subject: `Restablecé tu contraseña: ${code}`,
+      html: `
+        <p>Hola,</p>
+        <p>Recibimos un pedido para restablecer la contraseña de tu cuenta. Usá este código:</p>
+        <p style="font-size: 24px; font-weight: bold; letter-spacing: 4px; text-align: center; margin: 20px 0;">${code}</p>
+        <p>Este código expira en 30 minutos. Si no lo pediste, ignorá este mensaje: tu contraseña no cambia sola.</p>
+      `,
+    });
+  }
+
   /** Aviso de que el pedido fue despachado. */
   async sendShipmentNotification(ctx: { contactName: string; contactEmail: string; number: number; provider: string; trackingNumber: string }) {
     const displayNumber = formatOrderNumber(ctx.number);

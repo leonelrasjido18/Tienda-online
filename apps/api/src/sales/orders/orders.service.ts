@@ -8,6 +8,8 @@ import {
   type ShipmentStatus,
   type OrderSummaryDto,
   type PaymentStatus as PaymentStatusValue,
+  canTransitionOrderFinancial,
+  canTransitionPayment,
 } from '@tienda/shared';
 import type { Order, OrderEvent, OrderItem, OrderItemCustomization, Payment, Prisma, Shipment } from '@prisma/client';
 
@@ -154,6 +156,14 @@ export class OrdersService {
         ? 'REFUNDED'
         : order.financialStatus;
 
+      if (order.financialStatus !== finalFinancialStatus) {
+        if (!canTransitionOrderFinancial(order.financialStatus, finalFinancialStatus)) {
+          throw new BadRequestException(
+            `Transición inválida: no se puede pasar el estado financiero de ${order.financialStatus} a ${finalFinancialStatus}`,
+          );
+        }
+      }
+
       await tx.order.update({
         where: { id: orderId },
         data: {
@@ -257,6 +267,14 @@ export class OrdersService {
 
       const newTotalRefunded = totalRefunded + amountCents;
       const newFinancialStatus = newTotalRefunded >= totalApproved ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+
+      if (order.financialStatus !== newFinancialStatus) {
+        if (!canTransitionOrderFinancial(order.financialStatus, newFinancialStatus)) {
+          throw new BadRequestException(
+            `Transición inválida: no se puede pasar el estado financiero de ${order.financialStatus} a ${newFinancialStatus}`,
+          );
+        }
+      }
 
       await tx.order.update({
         where: { id: orderId },
@@ -432,6 +450,12 @@ export class OrdersService {
         return null;
       }
 
+      if (!canTransitionPayment(lockedPayment.status as PaymentStatusValue, 'APPROVED')) {
+        throw new BadRequestException(
+          `Transición inválida: no se puede pasar el estado del pago de ${lockedPayment.status} a APPROVED`,
+        );
+      }
+
       const payment = await tx.payment.update({
         where: { id: paymentId },
         data: {
@@ -462,6 +486,14 @@ export class OrdersService {
       const hasPreorderItems = currentOrder.items.some((item) => item.fulfillmentMode === 'PREORDER');
       const financialStatus: OrderFinancialStatus =
         payment.kind === 'FULL' || isBalance ? 'PAID' : 'DEPOSIT_PAID';
+
+      if (currentOrder.financialStatus !== financialStatus) {
+        if (!canTransitionOrderFinancial(currentOrder.financialStatus, financialStatus)) {
+          throw new BadRequestException(
+            `Transición inválida: no se puede pasar el estado financiero del pedido de ${currentOrder.financialStatus} a ${financialStatus}`,
+          );
+        }
+      }
 
       const updated = await tx.order.update({
         where: { id: currentOrder.id },

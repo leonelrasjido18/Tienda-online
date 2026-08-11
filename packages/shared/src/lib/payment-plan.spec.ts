@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { calculatePaymentPlan } from './payment-plan';
+import { applyDiscountToPlan, calculatePaymentPlan } from './payment-plan';
 
 describe('calculatePaymentPlan', () => {
   it('cobra el total hoy cuando todos los items tienen stock', () => {
@@ -45,5 +45,36 @@ describe('calculatePaymentPlan', () => {
   it('con carrito vacío no cobra nada', () => {
     const result = calculatePaymentPlan([], 50);
     expect(result).toEqual({ plan: 'FULL', subtotalCents: 0, depositCents: null, balanceCents: null, dueTodayCents: 0 });
+  });
+});
+
+describe('applyDiscountToPlan', () => {
+  it('resta el descuento del total a pagar hoy en un plan FULL', () => {
+    const plan = calculatePaymentPlan([{ totalCents: 15000, fulfillment: 'IN_STOCK' }], 50);
+    const discounted = applyDiscountToPlan(plan, 3000, 50);
+    expect(discounted.subtotalCents).toBe(15000); // el bruto no cambia
+    expect(discounted.dueTodayCents).toBe(12000);
+  });
+
+  it('reparte el descuento entre seña y saldo en un plan con encargo', () => {
+    const plan = calculatePaymentPlan([{ totalCents: 30000, fulfillment: 'PREORDER' }], 50);
+    const discounted = applyDiscountToPlan(plan, 10000, 50);
+    // Neto 20000 → seña 50% = 10000, saldo 10000
+    expect(discounted.subtotalCents).toBe(30000);
+    expect(discounted.depositCents).toBe(10000);
+    expect(discounted.balanceCents).toBe(10000);
+    expect(discounted.dueTodayCents).toBe(10000);
+    expect((discounted.depositCents ?? 0) + (discounted.balanceCents ?? 0)).toBe(20000);
+  });
+
+  it('nunca deja el total por debajo de cero: topa el descuento al subtotal', () => {
+    const plan = calculatePaymentPlan([{ totalCents: 5000, fulfillment: 'IN_STOCK' }], 50);
+    const discounted = applyDiscountToPlan(plan, 999999, 50);
+    expect(discounted.dueTodayCents).toBe(0);
+  });
+
+  it('un descuento de cero devuelve el plan intacto', () => {
+    const plan = calculatePaymentPlan([{ totalCents: 8000, fulfillment: 'PREORDER' }], 40);
+    expect(applyDiscountToPlan(plan, 0, 40)).toEqual(plan);
   });
 });

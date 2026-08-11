@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 
 import type { Env } from '../config/env.validation';
+import { TurnstileModule } from '../common/turnstile/turnstile.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -22,6 +23,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
         signOptions: { expiresIn: config.get('JWT_ACCESS_TTL', { infer: true }) },
       }),
     }),
+    TurnstileModule,
   ],
   controllers: [AuthController],
   providers: [

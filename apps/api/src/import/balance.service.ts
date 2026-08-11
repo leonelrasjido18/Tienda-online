@@ -8,6 +8,7 @@ import {
   type BalanceCheckoutDto,
   type CheckoutPaymentMethod,
   type PayBalanceResponse,
+  canTransitionOrderFinancial,
 } from '@tienda/shared';
 import type { Prisma } from '@prisma/client';
 
@@ -49,6 +50,7 @@ export class BalanceService {
   async onBatchReceived(batchId: string) {
     const orders = await this.prisma.order.findMany({
       where: { importBatchId: batchId, financialStatus: { in: ['DEPOSIT_PAID', 'AWAITING_BALANCE'] } },
+      include: { coupon: true },
     });
 
     const ttlDays = this.config.get('BALANCE_LINK_TTL_DAYS');
@@ -61,19 +63,32 @@ export class BalanceService {
       if (existing) continue;
 
       const quote = await this.shipping.quoteForOrder(order.id);
+      // Envío gratis: si el pedido usó un cupón FREE_SHIPPING, el cliente no paga
+      // el envío al saldar. Se cotiza igual (para el registro) pero se cobra 0.
+      const freeShipping = order.coupon?.type === 'FREE_SHIPPING';
+      const shippingChargeCents = freeShipping ? 0 : quote.priceCents;
       const balanceCents = order.balanceCents ?? 0;
-      const amountCents = balanceCents + quote.priceCents;
+      const amountCents = balanceCents + shippingChargeCents;
 
       const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
       const token = randomBytes(24).toString('base64url');
 
       await this.prisma.$transaction(async (tx) => {
+        const freshOrder = await tx.order.findUniqueOrThrow({ where: { id: order.id } });
+        if (freshOrder.financialStatus !== 'AWAITING_BALANCE') {
+          if (!canTransitionOrderFinancial(freshOrder.financialStatus, 'AWAITING_BALANCE')) {
+            throw new BadRequestException(
+              `Transición inválida: no se puede pasar el estado financiero de ${freshOrder.financialStatus} a AWAITING_BALANCE`,
+            );
+          }
+        }
+
         await tx.paymentLink.create({
           data: {
             token,
             orderId: order.id,
             balanceCents,
-            shippingCents: quote.priceCents,
+            shippingCents: shippingChargeCents,
             amountCents,
             expiresAt,
           },
@@ -82,8 +97,9 @@ export class BalanceService {
         await tx.order.update({
           where: { id: order.id },
           data: {
-            shippingCents: quote.priceCents,
-            totalCents: order.subtotalCents + quote.priceCents,
+            shippingCents: shippingChargeCents,
+            // El total ya descuenta el cupón aplicado en el checkout, más el envío cobrado.
+            totalCents: order.subtotalCents - order.discountCents + shippingChargeCents,
             financialStatus: 'AWAITING_BALANCE',
             fulfillmentStatus: 'READY',
           },
@@ -93,9 +109,9 @@ export class BalanceService {
           data: {
             orderId: order.id,
             type: 'balance_requested',
-            message: `Saldo solicitado: ${formatCentsAsArs(amountCents)} (envío ${formatCentsAsArs(quote.priceCents)}${
-              quote.fallbackReason ? ` — ${quote.fallbackReason}` : ''
-            })`,
+            message: `Saldo solicitado: ${formatCentsAsArs(amountCents)} (envío ${formatCentsAsArs(shippingChargeCents)}${
+              freeShipping ? ' — envío gratis por cupón' : ''
+            }${quote.fallbackReason ? ` — ${quote.fallbackReason}` : ''})`,
           },
         });
       });
@@ -105,7 +121,7 @@ export class BalanceService {
         contactEmail: order.contactEmail,
         displayNumber: formatOrderNumber(order.number),
         balanceCents,
-        shippingCents: quote.priceCents,
+        shippingCents: shippingChargeCents,
         amountCents,
         url: this.publicUrl(token),
         expiresAt,
@@ -260,6 +276,15 @@ export class BalanceService {
    */
   async settleBalance(orderId: string, reason: string) {
     const order = await this.prisma.$transaction(async (tx) => {
+      const freshOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+      if (freshOrder.financialStatus !== 'PAID') {
+        if (!canTransitionOrderFinancial(freshOrder.financialStatus, 'PAID')) {
+          throw new BadRequestException(
+            `Transición inválida: no se puede pasar el estado financiero de ${freshOrder.financialStatus} a PAID`,
+          );
+        }
+      }
+
       const updated = await tx.order.update({
         where: { id: orderId },
         data: { financialStatus: 'PAID' },

@@ -52,6 +52,10 @@ export const envSchema = z.object({
 
   /** Días de vigencia del link de cobro del saldo. */
   BALANCE_LINK_TTL_DAYS: z.coerce.number().int().positive().default(14),
+
+  // Cloudflare Turnstile keys (defaults are CF dummy keys that always pass)
+  TURNSTILE_SITE_KEY: z.string().default('1x00000000000000000000AA'),
+  TURNSTILE_SECRET_KEY: z.string().default('1x0000000000000000000000000000000AA'),
 }).superRefine((env, ctx) => {
   if (env.NODE_ENV !== 'production') return;
 

@@ -3,6 +3,17 @@ import { z } from 'zod';
 export const PAYMENT_LINK_STATUSES = ['PENDING', 'PAID', 'EXPIRED', 'CANCELLED'] as const;
 export type PaymentLinkStatus = (typeof PAYMENT_LINK_STATUSES)[number];
 
+export const PAYMENT_LINK_TRANSITIONS: Record<PaymentLinkStatus, PaymentLinkStatus[]> = {
+  PENDING: ['PAID', 'EXPIRED', 'CANCELLED'],
+  PAID: [],
+  EXPIRED: [],
+  CANCELLED: [],
+};
+
+export function canTransitionPaymentLink(from: PaymentLinkStatus, to: PaymentLinkStatus): boolean {
+  return PAYMENT_LINK_TRANSITIONS[from].includes(to);
+}
+
 /** Vista pública del saldo: es lo que ve el cliente al abrir el link del email. */
 export const balanceCheckoutSchema = z.object({
   token: z.string(),

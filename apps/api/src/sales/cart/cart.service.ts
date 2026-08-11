@@ -115,6 +115,79 @@ export class CartService {
     await this.prisma.cartItem.deleteMany({ where: { cartId } });
   }
 
+  /** Vincula un carrito anónimo (por token de sesión) con el cliente autenticado. */
+  async mergeAnonymousCartWithCustomer(sessionToken: string, customerId: string): Promise<void> {
+    const anonymousCart = await this.prisma.cart.findUnique({
+      where: { sessionToken },
+      include: { items: true },
+    });
+
+    if (!anonymousCart || anonymousCart.expiresAt < new Date()) {
+      return;
+    }
+
+    // Buscar si el cliente ya tiene un carrito activo
+    const customerCart = await this.prisma.cart.findFirst({
+      where: {
+        customerId,
+        expiresAt: { gte: new Date() },
+      },
+      include: { items: true },
+    });
+
+    if (!customerCart) {
+      // Si el cliente no tiene carrito, simplemente le asignamos el anónimo
+      await this.prisma.cart.update({
+        where: { id: anonymousCart.id },
+        data: { customerId },
+      });
+      return;
+    }
+
+    // Si ambos carritos existen, fusionamos los ítems del anónimo al del cliente
+    for (const anonItem of anonymousCart.items) {
+      if (!anonItem.variantId) continue;
+      const isCustomized = anonItem.customizationDraft && Object.keys(anonItem.customizationDraft).length > 0;
+
+      let matchedItem = null;
+      if (!isCustomized) {
+        matchedItem = customerCart.items.find(
+          (item) => item.variantId === anonItem.variantId && !item.customizationDraft,
+        );
+      } else {
+        matchedItem = customerCart.items.find(
+          (item) =>
+            item.variantId === anonItem.variantId &&
+            JSON.stringify(item.customizationDraft) === JSON.stringify(anonItem.customizationDraft),
+        );
+      }
+
+      if (matchedItem) {
+        // Si el ítem ya existe, acumulamos cantidad
+        await this.prisma.cartItem.update({
+          where: { id: matchedItem.id },
+          data: { quantity: matchedItem.quantity + anonItem.quantity },
+        });
+      } else {
+        // Si no existe, lo insertamos en el carrito del cliente
+        await this.prisma.cartItem.create({
+          data: {
+            cartId: customerCart.id,
+            variantId: anonItem.variantId,
+            quantity: anonItem.quantity,
+            priceCentsAtAdd: anonItem.priceCentsAtAdd,
+            customizationDraft: anonItem.customizationDraft ?? Prisma.DbNull,
+          },
+        });
+      }
+    }
+
+    // Eliminamos el carrito anónimo ahora vacío
+    await this.prisma.cart.delete({
+      where: { id: anonymousCart.id },
+    });
+  }
+
   private async touchCart(cartId: string) {
     await this.prisma.cart.update({ where: { id: cartId }, data: { expiresAt: this.newExpiry() } });
   }

@@ -27,10 +27,37 @@ export type OrderFulfillmentStatus = (typeof ORDER_FULFILLMENT_STATUSES)[number]
 export const PAYMENT_PLANS = ['FULL', 'DEPOSIT_BALANCE'] as const;
 export type PaymentPlanKind = (typeof PAYMENT_PLANS)[number];
 
+export const ORDER_FINANCIAL_TRANSITIONS: Record<OrderFinancialStatus, OrderFinancialStatus[]> = {
+  PENDING: ['DEPOSIT_PAID', 'PAID', 'FAILED', 'EXPIRED'],
+  DEPOSIT_PAID: ['AWAITING_BALANCE', 'PAID', 'PARTIALLY_REFUNDED', 'REFUNDED'],
+  AWAITING_BALANCE: ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED'],
+  PAID: ['PARTIALLY_REFUNDED', 'REFUNDED'],
+  PARTIALLY_REFUNDED: ['REFUNDED'],
+  REFUNDED: [],
+  FAILED: [],
+  EXPIRED: [],
+};
+
+export function canTransitionOrderFinancial(from: OrderFinancialStatus, to: OrderFinancialStatus): boolean {
+  return ORDER_FINANCIAL_TRANSITIONS[from].includes(to);
+}
+
 export const PAYMENT_KINDS = ['DEPOSIT', 'BALANCE', 'FULL', 'REFUND'] as const;
 export const PAYMENT_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'REFUNDED', 'CANCELLED'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export type PaymentKind = (typeof PAYMENT_KINDS)[number];
+
+export const PAYMENT_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> = {
+  PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'],
+  APPROVED: ['REFUNDED'],
+  REJECTED: [],
+  CANCELLED: [],
+  REFUNDED: [],
+};
+
+export function canTransitionPayment(from: PaymentStatus, to: PaymentStatus): boolean {
+  return PAYMENT_TRANSITIONS[from].includes(to);
+}
 
 export const CHECKOUT_PAYMENT_METHODS = ['mercadopago', 'uala', 'bank_transfer'] as const;
 export type CheckoutPaymentMethod = (typeof CHECKOUT_PAYMENT_METHODS)[number];
@@ -76,8 +103,16 @@ export const createOrderSchema = z.object({
   shipping: checkoutShippingSchema,
   paymentMethod: z.enum(CHECKOUT_PAYMENT_METHODS),
   notes: z.string().max(500).optional(),
+  // El código se revalida y aplica en el servidor; nunca se confía en el descuento
+  // calculado en el cliente.
+  couponCode: z.string().trim().min(1).max(40).optional(),
 });
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+
+export const retryPaymentSchema = z.object({
+  paymentMethod: z.enum(CHECKOUT_PAYMENT_METHODS),
+});
+export type RetryPaymentInput = z.infer<typeof retryPaymentSchema>;
 
 export const createOrderResponseSchema = z.object({
   orderId: z.string().uuid(),

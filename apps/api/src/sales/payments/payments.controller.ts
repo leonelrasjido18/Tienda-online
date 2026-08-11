@@ -1,4 +1,5 @@
 import { Body, Controller, NotFoundException, Param, Post, Query, Req } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Prisma } from '@prisma/client';
 import type { Request } from 'express';
 
@@ -25,6 +26,7 @@ export class PaymentsController {
    * recién entonces se toca la orden.
    */
   @Post('webhook')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   async webhook(
     @Param('provider') providerName: string,
     @Req() req: Request,

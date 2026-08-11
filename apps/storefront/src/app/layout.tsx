@@ -4,6 +4,7 @@ import { ThemeScript } from '@tienda/ui';
 
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
+import { AnalyticsScripts } from '@/components/analytics-scripts';
 import { CartProvider } from '@/lib/cart-context';
 import { siteConfig } from '@/lib/site-config';
 
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       <head>
         <ThemeScript />
       </head>
+      <AnalyticsScripts />
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <CartProvider>
           <SiteHeader />

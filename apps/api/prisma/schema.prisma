@@ -489,13 +489,133 @@ model Customer {
   email     String   @unique
   name      String?
   phone     String?
+  // Autenticación por contraseña. `passwordHash` es opcional para no romper filas
+  // creadas antes (cuentas sin clave); el login exige que esté seteado.
+  passwordHash    String?
+  emailVerifiedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  carts  Cart[]
-  orders Order[]
+  // Default shipping details
+  defaultPickupInStore Boolean @default(false)
+  defaultStreet        String?
+  defaultNumber        String?
+  defaultFloor         String?
+  defaultCity          String?
+  defaultProvince      String?
+  defaultPostalCode    String?
+  defaultNotes         String?
+
+  // Referral details
+  referralCode         String?   @unique
+  referredById         String?
+  referredBy           Customer? @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals            Customer[] @relation("Referrals")
+  referralBalanceCents Int       @default(0)
+
+  carts                Cart[]
+  orders               Order[]
+  couponUses           CouponCustomerUse[]
+  referralRewardsGiven    ReferralReward[] @relation("Referred")
+  referralRewardsReceived ReferralReward[] @relation("Referrer")
 
   @@map("customers")
+}
+
+/**
+ * Códigos de un solo uso para verificar el email y para restablecer la contraseña.
+ * (Antes se usaba para login sin clave; ahora el login es por contraseña.)
+ */
+model CustomerAuthCode {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  type      String   @default("VERIFY_EMAIL") // VERIFY_EMAIL | RESET_PASSWORD
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  usedAt    DateTime?
+
+  @@index([email, type])
+  @@map("customer_magic_codes")
+}
+
+model StaticPage {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  contentHtml String   @db.Text
+  contentMd   String?  @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("static_pages")
+}
+
+model FAQ {
+  id         String   @id @default(uuid())
+  question   String
+  answerHtml String   @db.Text
+  answerMd   String?  @db.Text
+  category   String
+  position   Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("faqs")
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_SHIPPING
+}
+
+model Coupon {
+  id               String     @id @default(uuid())
+  code             String     @unique
+  type             CouponType
+  value            Int
+  minPurchaseCents Int        @default(0)
+  maxUses          Int?
+  uses             Int        @default(0)
+  expiresAt        DateTime?
+  isActive         Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  orders       Order[]
+  customerUses CouponCustomerUse[]
+
+  @@map("coupons")
+}
+
+model CouponCustomerUse {
+  id         String   @id @default(uuid())
+  couponId   String
+  coupon     Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderId    String   @unique
+  createdAt  DateTime @default(now())
+
+  @@unique([couponId, customerId, orderId])
+  @@map("coupon_customer_uses")
+}
+
+model ReferralReward {
+  id          String   @id @default(uuid())
+  referrerId  String
+  referrer    Customer @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredId  String   @unique
+  referred    Customer @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
+  rewardCents Int
+  status      String   @default("PENDING") // PENDING, APPROVED, CANCELLED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("referral_rewards")
 }
 
 model Cart {
@@ -536,6 +656,10 @@ model Order {
 
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  couponId      String?
+  coupon        Coupon?                @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  discountCents Int                    @default(0)
 
   contactName  String
   contactEmail String

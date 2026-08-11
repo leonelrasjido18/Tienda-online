@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Input, Label } from '@tienda/ui';
+import { Button, Input, Label, Turnstile } from '@tienda/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
@@ -12,6 +12,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -26,7 +27,7 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(email, password, turnstileToken || undefined);
       router.replace('/dashboard');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo iniciar sesión');
@@ -71,6 +72,13 @@ export default function LoginPage() {
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <Turnstile
+          onSuccess={setTurnstileToken}
+          onExpire={() => setTurnstileToken(null)}
+          onError={() => setTurnstileToken(null)}
+          className="flex justify-center"
+        />
 
         <Button type="submit" className="w-full" disabled={submitting}>
           {submitting ? 'Ingresando…' : 'Ingresar'}

@@ -1,10 +1,18 @@
 'use client';
 
-import { formatCentsAsArs, type PublicOrderDetailDto } from '@tienda/shared';
-import { buttonVariants } from '@tienda/ui';
+import {
+  formatCentsAsArs,
+  PAYMENT_METHOD_LABELS,
+  type PublicOrderDetailDto,
+  type CheckoutPaymentMethod,
+  type PublicStoreSettingsDto,
+  type CreateOrderResponse,
+} from '@tienda/shared';
+import { buttonVariants, Turnstile } from '@tienda/ui';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Landmark, CreditCard } from 'lucide-react';
 
 import { clientFetch } from '@/lib/client-api';
 
@@ -21,9 +29,24 @@ export default function OrderConfirmationPage() {
   const [order, setOrder] = useState<PublicOrderDetailDto | null>(null);
   const [bankTransferInstructions, setBankTransferInstructions] = useState<string | null>(null);
 
+  // States for retry payment
+  const [enabledMethods, setEnabledMethods] = useState<CheckoutPaymentMethod[]>(['bank_transfer']);
+  const [selectedMethod, setSelectedMethod] = useState<CheckoutPaymentMethod>('bank_transfer');
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [showRetry, setShowRetry] = useState(false);
+
   useEffect(() => {
     clientFetch<PublicOrderDetailDto>(`/orders/${params.id}`)
-      .then(setOrder)
+      .then((ord) => {
+        setOrder(ord);
+        // If not bank transfer, show retry payment option immediately by default if order is PENDING
+        const hasBank = ord.payments.some((p) => p.provider === 'bank_transfer' && p.status === 'PENDING');
+        if (!hasBank) {
+          setShowRetry(true);
+        }
+      })
       .catch(() => undefined);
   }, [params.id]);
 
@@ -34,11 +57,54 @@ export default function OrderConfirmationPage() {
       .catch(() => undefined);
   }, [order]);
 
+  useEffect(() => {
+    if (order?.financialStatus === 'PENDING') {
+      clientFetch<PublicStoreSettingsDto>('/settings')
+        .then((s) => {
+          const methods = s.enabledPaymentMethods as CheckoutPaymentMethod[];
+          if (methods.length > 0) {
+            setEnabledMethods(methods);
+            setSelectedMethod(methods[0]!);
+          }
+        })
+        .catch(() => undefined);
+    }
+  }, [order]);
+
   if (!order) {
     return <p className="mx-auto max-w-xl px-4 py-8 text-sm text-muted-foreground">Cargando…</p>;
   }
 
   const pendingBankTransfer = order.payments.find((p) => p.provider === 'bank_transfer' && p.status === 'PENDING');
+
+  async function handleRetryPayment() {
+    setRetryError(null);
+    setRetrying(true);
+    try {
+      const res = await clientFetch<CreateOrderResponse>(`/checkout/${params.id}/retry`, {
+        method: 'POST',
+        headers: turnstileToken ? { 'x-turnstile-token': turnstileToken } : undefined,
+        body: JSON.stringify({ paymentMethod: selectedMethod }),
+      });
+
+      if (res.redirectUrl) {
+        window.location.href = res.redirectUrl;
+        return;
+      }
+
+      // If changed to bank transfer or no redirect, reload order details
+      const updatedOrder = await clientFetch<PublicOrderDetailDto>(`/orders/${params.id}`);
+      setOrder(updatedOrder);
+      if (res.bankTransferInstructions) {
+        setBankTransferInstructions(res.bankTransferInstructions);
+      }
+      setShowRetry(false);
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : 'Ocurrió un error al procesar el pago. Intente nuevamente.');
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-xl px-4 py-12 text-center">
@@ -62,23 +128,108 @@ export default function OrderConfirmationPage() {
         </dl>
       </div>
 
-      {pendingBankTransfer && (
-        <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4 text-left text-sm">
-          <p className="font-medium">Transferí {formatCentsAsArs(pendingBankTransfer.amountCents)} para confirmar tu pedido.</p>
-          <p className="mt-1 text-muted-foreground">
-            Te vamos a avisar por email apenas confirmemos la recepción de la transferencia.
-          </p>
-          {bankTransferInstructions && (
-            <p className="mt-3 whitespace-pre-line border-t border-border pt-3 text-muted-foreground">
-              {bankTransferInstructions}
+      {pendingBankTransfer && !showRetry && (
+        <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4 text-left text-sm space-y-4">
+          <div>
+            <p className="font-medium">Transferí {formatCentsAsArs(pendingBankTransfer.amountCents)} para confirmar tu pedido.</p>
+            <p className="mt-1 text-muted-foreground">
+              Te vamos a avisar por email apenas confirmemos la recepción de la transferencia.
             </p>
-          )}
+            {bankTransferInstructions && (
+              <p className="mt-3 whitespace-pre-line border-t border-border pt-3 text-muted-foreground">
+                {bankTransferInstructions}
+              </p>
+            )}
+          </div>
+          <div className="pt-2 border-t border-border">
+            <button
+              onClick={() => setShowRetry(true)}
+              className="text-xs text-accent font-semibold hover:underline"
+            >
+              ¿Preferís pagar online con tarjeta de crédito o débito?
+            </button>
+          </div>
         </div>
       )}
 
-      <Link href="/productos" className={buttonVariants({ className: 'mt-8' })}>
-        Seguir comprando
-      </Link>
+      {order.financialStatus === 'PENDING' && showRetry && (
+        <div className="mt-6 rounded-lg border border-border p-5 bg-card text-left space-y-4">
+          <h2 className="text-sm font-bold text-foreground">Completar el pago de tu pedido</h2>
+          <p className="text-xs text-muted-foreground">
+            Seleccioná cómo querés realizar el pago de la seña o total para confirmar tu compra.
+          </p>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {enabledMethods.map((method) => {
+              const Icon = method === 'bank_transfer' ? Landmark : CreditCard;
+              return (
+                <label
+                  key={method}
+                  className={
+                    'flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-all ' +
+                    (selectedMethod === method
+                      ? 'border-accent bg-accent/10 font-semibold'
+                      : 'border-border bg-card hover:bg-secondary')
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    checked={selectedMethod === method}
+                    onChange={() => setSelectedMethod(method)}
+                    className="sr-only"
+                  />
+                  <Icon className="h-4 w-4 text-accent shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-foreground">{PAYMENT_METHOD_LABELS[method]}</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          {selectedMethod !== 'bank_transfer' && (
+            <Turnstile
+              onSuccess={setTurnstileToken}
+              onExpire={() => setTurnstileToken(null)}
+              onError={() => setTurnstileToken(null)}
+              className="flex justify-center py-2"
+            />
+          )}
+
+          {retryError && (
+            <p className="text-xs text-destructive">{retryError}</p>
+          )}
+
+          <div className="flex gap-2">
+            {pendingBankTransfer && (
+              <button
+                type="button"
+                onClick={() => setShowRetry(false)}
+                className="w-1/3 rounded-md border border-border py-2 text-xs font-bold text-muted-foreground hover:bg-muted/10"
+              >
+                Volver
+              </button>
+            )}
+            <button
+              onClick={() => void handleRetryPayment()}
+              disabled={retrying || (selectedMethod !== 'bank_transfer' && !turnstileToken)}
+              className={
+                'rounded-md bg-primary py-2 text-xs font-bold text-primary-foreground hover:bg-primary/95 disabled:opacity-50 ' +
+                (pendingBankTransfer ? 'w-2/3' : 'w-full')
+              }
+            >
+              {retrying ? 'Procesando...' : selectedMethod === 'bank_transfer' ? 'Elegir transferencia' : 'Pagar ahora'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-8">
+        <Link href="/productos" className={buttonVariants()}>
+          Seguir comprando
+        </Link>
+      </div>
     </div>
   );
 }
