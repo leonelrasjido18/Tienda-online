@@ -12,6 +12,7 @@ export * from './schemas/catalog/team.schema';
 export * from './schemas/catalog/season.schema';
 export * from './schemas/catalog/brand.schema';
 export * from './schemas/catalog/category.schema';
+export * from './schemas/catalog/collection.schema';
 export * from './schemas/catalog/product.schema';
 
 export * from './schemas/customization/print-area.schema';
@@ -23,6 +24,7 @@ export * from './schemas/customization/customization-input.schema';
 export * from './schemas/sales/cart.schema';
 export * from './schemas/sales/order.schema';
 export * from './schemas/sales/customer-auth.schema';
+export * from './schemas/sales/review.schema';
 export * from './schemas/sales/settings.schema';
 
 export * from './schemas/import/batch.schema';

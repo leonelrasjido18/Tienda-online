@@ -39,6 +39,13 @@ export const envSchema = z.object({
   VAPID_PRIVATE_KEY: z.string().default(''),
   VAPID_SUBJECT: z.string().default('mailto:owner@tienda.local'),
 
+  // Meta Conversions API (server-side). Opcional: si faltan, no se envía nada.
+  META_PIXEL_ID: z.string().default(''),
+  META_CAPI_ACCESS_TOKEN: z.string().default(''),
+
+  // Marca en el feed de Google Merchant (opcional).
+  MERCHANT_FEED_BRAND: z.string().default('Remeras del Área'),
+
   CHECKOUT_RESERVATION_TTL_MINUTES: z.coerce.number().int().positive().default(20),
   BANK_TRANSFER_RESERVATION_TTL_HOURS: z.coerce.number().int().positive().default(48),
 

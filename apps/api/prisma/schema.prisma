@@ -241,6 +241,7 @@ model Product {
   images        ProductImage[]
   collections   ProductCollection[]
   customization CustomizationTemplate?
+  reviews       Review[]
 
   @@index([status])
   @@index([leagueId])
@@ -518,8 +519,40 @@ model Customer {
   couponUses           CouponCustomerUse[]
   referralRewardsGiven    ReferralReward[] @relation("Referred")
   referralRewardsReceived ReferralReward[] @relation("Referrer")
+  reviews              Review[]
 
   @@map("customers")
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/**
+ * Reseña de producto. Sólo la puede dejar un cliente con un pedido PAID que
+ * incluyó ese producto (comprador verificado), una por producto, y entra como
+ * PENDING hasta que el panel la modera.
+ */
+model Review {
+  id         String       @id @default(uuid())
+  productId  String
+  product    Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderId    String
+  rating     Int
+  title      String?
+  body       String
+  status     ReviewStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([productId, customerId])
+  @@index([productId, status])
+  @@index([status])
+  @@map("reviews")
 }
 
 /**
@@ -626,6 +659,11 @@ model Cart {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   expiresAt    DateTime
+
+  // Recuperación de carrito abandonado: hasta qué etapa (0=ninguna, 1=4h, 2=24h,
+  // 3=72h) se avisó. Se reinicia a 0 cuando el cliente vuelve a tocar el carrito.
+  abandonedStage         Int       @default(0)
+  lastAbandonedReminderAt DateTime?
 
   items CartItem[]
 

@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StockReservationService } from '../stock/stock-reservation.service';
 import { MailService } from '../notifications/mail.service';
 import { PushService } from '../notifications/push.service';
+import { MetaConversionsService } from '../analytics/meta-conversions.service';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { expect, vi, describe, it, beforeEach } from 'vitest';
@@ -74,6 +75,7 @@ describe('OrdersService', () => {
         { provide: MailService, useValue: mail },
         { provide: PushService, useValue: push },
         { provide: PaymentProviderRegistry, useValue: registry },
+        { provide: MetaConversionsService, useValue: { trackPurchase: vi.fn() } },
       ],
     }).compile();
 

@@ -31,6 +31,21 @@ export class PublicCatalogController {
     return this.catalog.getBySlug(slug);
   }
 
+  @Get('products/:slug/related')
+  getRelated(@Param('slug') slug: string) {
+    return this.catalog.getRelated(slug);
+  }
+
+  @Get('collections')
+  listCollections() {
+    return this.catalog.listCollections();
+  }
+
+  @Get('collections/:slug')
+  getCollection(@Param('slug') slug: string) {
+    return this.catalog.getCollectionBySlug(slug);
+  }
+
   @Get('facets')
   getFacets(@Query() query: unknown) {
     const parsed = productListQuerySchema.partial().parse(query);

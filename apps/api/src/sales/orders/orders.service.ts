@@ -18,6 +18,7 @@ import { MailService } from '../notifications/mail.service';
 import { PushService } from '../notifications/push.service';
 import { StockReservationService } from '../stock/stock-reservation.service';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
+import { MetaConversionsService } from '../analytics/meta-conversions.service';
 
 const ORDER_DETAIL_INCLUDE = {
   items: { include: { customization: true } },
@@ -47,6 +48,7 @@ export class OrdersService {
     private readonly stock: StockReservationService,
     private readonly mail: MailService,
     private readonly push: PushService,
+    private readonly metaConversions: MetaConversionsService,
     @Inject(forwardRef(() => PaymentProviderRegistry))
     private readonly paymentRegistry: PaymentProviderRegistry,
   ) {}
@@ -543,6 +545,18 @@ export class OrdersService {
       body: order.contactName,
       url: `/pedidos/${order.id}`,
     });
+
+    // Purchase a Meta CAPI sólo cuando la compra quedó completa (PAID). event_id =
+    // número de orden para deduplicar contra el Pixel del navegador. No bloquea:
+    // el servicio nunca lanza.
+    if (order.financialStatus === 'PAID') {
+      await this.metaConversions.trackPurchase({
+        eventId: `order-${order.number}`,
+        email: order.contactEmail,
+        phone: order.contactPhone,
+        valueCents: order.totalCents,
+      });
+    }
   }
 
   private toSummaryDto(order: Order): OrderSummaryDto {

@@ -140,6 +140,32 @@ export class MailService {
     });
   }
 
+  /** Recordatorio de carrito abandonado con link para retomar la compra. */
+  async sendAbandonedCart(ctx: {
+    contactName: string | null;
+    contactEmail: string;
+    itemCount: number;
+    productNames: string[];
+    recoveryUrl: string;
+  }) {
+    const greeting = ctx.contactName ? `Hola ${escapeHtml(ctx.contactName)},` : 'Hola,';
+    const list = ctx.productNames
+      .slice(0, 5)
+      .map((n) => `<li>${escapeHtml(n)}</li>`)
+      .join('');
+    await this.send({
+      to: ctx.contactEmail,
+      subject: 'Te quedó algo en el carrito 🛒',
+      html: `
+        <p>${greeting}</p>
+        <p>Vimos que dejaste ${ctx.itemCount} producto(s) en tu carrito. ¡Todavía estás a tiempo de completarlo!</p>
+        <ul>${list}</ul>
+        <p><a href="${ctx.recoveryUrl}" style="display:inline-block;padding:12px 20px;background:#0A49F5;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">Retomar mi compra</a></p>
+        <p style="font-size:12px;color:#666;">Guardamos tu personalización tal como la dejaste.</p>
+      `,
+    });
+  }
+
   /** Aviso de que el pedido fue despachado. */
   async sendShipmentNotification(ctx: { contactName: string; contactEmail: string; number: number; provider: string; trackingNumber: string }) {
     const displayNumber = formatOrderNumber(ctx.number);

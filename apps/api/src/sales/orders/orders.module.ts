@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { forwardRef, Module } from '@nestjs/common';
 
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { STOCK_RESERVATION_QUEUE } from '../stock/reservation-queue.constants';
@@ -15,6 +16,7 @@ import { ReservationExpiryProcessor } from './reservation-expiry.processor';
     BullModule.registerQueue({ name: STOCK_RESERVATION_QUEUE }),
     StockModule,
     NotificationsModule,
+    AnalyticsModule,
     forwardRef(() => PaymentsModule),
   ],
   controllers: [AdminOrdersController, OrdersController],

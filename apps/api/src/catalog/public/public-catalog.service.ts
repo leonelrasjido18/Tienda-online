@@ -229,6 +229,93 @@ export class PublicCatalogService {
     return where;
   }
 
+  /** Colecciones activas (con al menos un producto activo) para el storefront. */
+  async listCollections() {
+    const collections = await this.prisma.collection.findMany({
+      orderBy: [{ position: 'asc' }, { name: 'asc' }],
+      include: {
+        _count: { select: { products: { where: { product: { status: 'ACTIVE' } } } } },
+      },
+    });
+    return collections
+      .filter((c) => c._count.products > 0)
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        description: c.description,
+        imageUrl: c.imageUrl,
+        position: c.position,
+        productCount: c._count.products,
+      }));
+  }
+
+  /** Una colección por slug con sus productos activos, en el orden definido. */
+  async getCollectionBySlug(slug: string) {
+    const collection = await this.prisma.collection.findUnique({
+      where: { slug },
+      include: {
+        products: {
+          orderBy: { position: 'asc' },
+          include: { product: { include: this.listInclude() } },
+        },
+      },
+    });
+    if (!collection) {
+      throw new NotFoundException('La colección no existe');
+    }
+    return {
+      id: collection.id,
+      name: collection.name,
+      slug: collection.slug,
+      description: collection.description,
+      imageUrl: collection.imageUrl,
+      products: collection.products
+        .filter((pc) => pc.product.status === 'ACTIVE')
+        .map((pc) => this.toListItem(pc.product)),
+    };
+  }
+
+  /**
+   * Productos relacionados a uno dado: primero los que comparten colección; si no
+   * alcanzan, se completa con el mismo equipo y luego la misma liga. Nunca incluye
+   * el producto original ni inactivos.
+   */
+  async getRelated(slug: string, limit = 8): Promise<ProductListItemDto[]> {
+    const product = await this.prisma.product.findFirst({
+      where: { slug, status: 'ACTIVE' },
+      select: { id: true, teamId: true, leagueId: true, collections: { select: { collectionId: true } } },
+    });
+    if (!product) {
+      throw new NotFoundException('El producto no existe');
+    }
+
+    const collectionIds = product.collections.map((c) => c.collectionId);
+    const collected = new Map<string, Prisma.ProductGetPayload<{ include: ReturnType<PublicCatalogService['listInclude']> }>>();
+
+    const pushWhere = async (where: Prisma.ProductWhereInput) => {
+      if (collected.size >= limit) return;
+      const rows = await this.prisma.product.findMany({
+        where: { ...where, status: 'ACTIVE', id: { not: product.id } },
+        include: this.listInclude(),
+        take: limit,
+      });
+      for (const row of rows) {
+        if (!collected.has(row.id)) collected.set(row.id, row);
+      }
+    };
+
+    if (collectionIds.length > 0) {
+      await pushWhere({ collections: { some: { collectionId: { in: collectionIds } } } });
+    }
+    if (product.teamId) await pushWhere({ teamId: product.teamId });
+    if (product.leagueId) await pushWhere({ leagueId: product.leagueId });
+
+    return Array.from(collected.values())
+      .slice(0, limit)
+      .map((p) => this.toListItem(p));
+  }
+
   private listInclude() {
     return {
       brand: true,

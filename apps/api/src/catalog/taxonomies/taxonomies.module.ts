@@ -4,6 +4,8 @@ import { BrandsController } from './brands.controller';
 import { BrandsService } from './brands.service';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
+import { CollectionsController } from './collections.controller';
+import { CollectionsService } from './collections.service';
 import { LeaguesController } from './leagues.controller';
 import { LeaguesService } from './leagues.service';
 import { SeasonsController } from './seasons.controller';
@@ -12,8 +14,15 @@ import { TeamsController } from './teams.controller';
 import { TeamsService } from './teams.service';
 
 @Module({
-  controllers: [LeaguesController, TeamsController, SeasonsController, BrandsController, CategoriesController],
-  providers: [LeaguesService, TeamsService, SeasonsService, BrandsService, CategoriesService],
-  exports: [LeaguesService, TeamsService, SeasonsService, BrandsService, CategoriesService],
+  controllers: [
+    LeaguesController,
+    TeamsController,
+    SeasonsController,
+    BrandsController,
+    CategoriesController,
+    CollectionsController,
+  ],
+  providers: [LeaguesService, TeamsService, SeasonsService, BrandsService, CategoriesService, CollectionsService],
+  exports: [LeaguesService, TeamsService, SeasonsService, BrandsService, CategoriesService, CollectionsService],
 })
 export class TaxonomiesModule {}

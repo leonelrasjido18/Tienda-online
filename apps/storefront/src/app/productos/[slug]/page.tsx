@@ -1,11 +1,15 @@
-import type { ProductDetailDto } from '@tienda/shared';
+import type { ProductDetailDto, ProductListItemDto, ReviewSummaryDto } from '@tienda/shared';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 
 import { apiFetch, ApiNotFoundError } from '@/lib/api';
 import { siteConfig } from '@/lib/site-config';
+import { ProductCard } from '@/components/product-card';
 import { VariantSelector } from './variant-selector';
+import { ProductReviews } from './product-reviews';
+
+const EMPTY_REVIEWS: ReviewSummaryDto = { average: 0, count: 0, reviews: [] };
 
 async function getProduct(slug: string) {
   try {
@@ -15,6 +19,24 @@ async function getProduct(slug: string) {
       return null;
     }
     throw err;
+  }
+}
+
+/** Relacionados: si la API falla, la ficha no se cae, sólo no muestra la sección. */
+async function getRelated(slug: string): Promise<ProductListItemDto[]> {
+  try {
+    return await apiFetch<ProductListItemDto[]>(`/catalog/products/${slug}/related`);
+  } catch {
+    return [];
+  }
+}
+
+/** Reseñas aprobadas para SEO/hidratación inicial; tolera fallos de la API. */
+async function getReviews(slug: string): Promise<ReviewSummaryDto> {
+  try {
+    return await apiFetch<ReviewSummaryDto>(`/catalog/products/${slug}/reviews`);
+  } catch {
+    return EMPTY_REVIEWS;
   }
 }
 
@@ -42,7 +64,7 @@ export async function generateMetadata({ params }: PageProps<'/productos/[slug]'
 
 export default async function ProductPage({ params }: PageProps<'/productos/[slug]'>) {
   const { slug } = await params;
-  const product = await getProduct(slug);
+  const [product, related, reviews] = await Promise.all([getProduct(slug), getRelated(slug), getReviews(slug)]);
 
   if (!product) {
     notFound();
@@ -61,6 +83,15 @@ export default async function ProductPage({ params }: PageProps<'/productos/[slu
       price: product.variants[0] ? (product.variants[0].priceCents / 100).toFixed(2) : '0',
       availability: product.fulfillmentMode === 'PREORDER' ? 'https://schema.org/PreOrder' : 'https://schema.org/InStock',
     },
+    ...(reviews.count > 0
+      ? {
+          aggregateRating: {
+            '@type': 'AggregateRating',
+            ratingValue: reviews.average,
+            reviewCount: reviews.count,
+          },
+        }
+      : {}),
   };
 
   return (
@@ -96,6 +127,19 @@ export default async function ProductPage({ params }: PageProps<'/productos/[slu
       </nav>
 
       <VariantSelector product={product} />
+
+      <ProductReviews productId={product.id} initial={reviews} />
+
+      {related.length > 0 && (
+        <section className="mt-16">
+          <h2 className="mb-5 text-xl font-bold tracking-tight text-foreground">También te puede gustar</h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {related.map((item) => (
+              <ProductCard key={item.id} product={item} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

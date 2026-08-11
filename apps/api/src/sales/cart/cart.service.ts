@@ -189,7 +189,12 @@ export class CartService {
   }
 
   private async touchCart(cartId: string) {
-    await this.prisma.cart.update({ where: { id: cartId }, data: { expiresAt: this.newExpiry() } });
+    // Cualquier actividad reinicia el ciclo de recordatorios de abandono: el
+    // carrito volvió a estar "vivo", así que se arranca de cero.
+    await this.prisma.cart.update({
+      where: { id: cartId },
+      data: { expiresAt: this.newExpiry(), abandonedStage: 0 },
+    });
   }
 
   private newExpiry() {

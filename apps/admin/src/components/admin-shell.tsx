@@ -18,12 +18,14 @@ const NAV_LINKS = [
   { href: '/dashboard/temporadas', label: 'Temporadas' },
   { href: '/dashboard/marcas', label: 'Marcas' },
   { href: '/dashboard/categorias', label: 'Categorías' },
+  { href: '/dashboard/colecciones', label: 'Colecciones' },
   { href: '/dashboard/tipografias', label: 'Tipografías' },
   { href: '/dashboard/parches', label: 'Parches' },
   { href: '/dashboard/envios', label: 'Envíos' },
   { href: '/dashboard/paginas', label: 'Páginas' },
   { href: '/dashboard/preguntas', label: 'FAQs' },
   { href: '/dashboard/cupones', label: 'Cupones' },
+  { href: '/dashboard/resenas', label: 'Reseñas' },
   { href: '/dashboard/ajustes', label: 'Ajustes' },
 ];
 
