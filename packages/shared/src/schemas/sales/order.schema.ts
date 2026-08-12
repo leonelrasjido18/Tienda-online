@@ -59,17 +59,21 @@ export function canTransitionPayment(from: PaymentStatus, to: PaymentStatus): bo
   return PAYMENT_TRANSITIONS[from].includes(to);
 }
 
-export const CHECKOUT_PAYMENT_METHODS = ['mercadopago', 'uala', 'bank_transfer'] as const;
+export const CHECKOUT_PAYMENT_METHODS = ['mercadopago', 'uala', 'bank_transfer', 'cash'] as const;
 export type CheckoutPaymentMethod = (typeof CHECKOUT_PAYMENT_METHODS)[number];
 
 /** Pasarelas de tarjeta. La activa se elige por configuración, no por código. */
 export const CARD_PAYMENT_METHODS = ['mercadopago', 'uala'] as const;
 export type CardPaymentMethod = (typeof CARD_PAYMENT_METHODS)[number];
 
+/** Métodos offline (sin pasarela): la tienda los confirma a mano al recibir el pago. */
+export const OFFLINE_PAYMENT_METHODS = ['bank_transfer', 'cash'] as const;
+
 export const PAYMENT_METHOD_LABELS: Record<CheckoutPaymentMethod, string> = {
   mercadopago: 'Mercado Pago',
   uala: 'Ualá',
   bank_transfer: 'Transferencia bancaria',
+  cash: 'Efectivo (al retirar)',
 };
 
 // ---------------------------------------------------------------------------

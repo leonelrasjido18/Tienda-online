@@ -213,7 +213,7 @@ export class BalanceService {
       }
 
       const inFlightCardPayment = await tx.payment.findFirst({
-        where: { orderId: link.orderId, kind: 'BALANCE', status: 'PENDING', provider: { not: 'bank_transfer' } },
+        where: { orderId: link.orderId, kind: 'BALANCE', status: 'PENDING', provider: { notIn: ['bank_transfer', 'cash'] } },
       });
       if (inFlightCardPayment) {
         throw new BadRequestException('Ya hay un pago en curso para este saldo. Revisá tu email o esperá unos minutos.');
@@ -229,11 +229,12 @@ export class BalanceService {
       });
     });
 
-    if (method === 'bank_transfer') {
+    if (method === 'bank_transfer' || method === 'cash') {
       const settings = await this.prisma.storeSettings.findUnique({ where: { id: 1 } });
       return {
         redirectUrl: null,
-        bankTransferInstructions: settings?.bankTransferInstructions ?? null,
+        // El efectivo se paga al retirar: no lleva datos bancarios.
+        bankTransferInstructions: method === 'bank_transfer' ? (settings?.bankTransferInstructions ?? null) : null,
         amountCents: link.amountCents,
       };
     }

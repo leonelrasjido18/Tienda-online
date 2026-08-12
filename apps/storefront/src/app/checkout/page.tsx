@@ -13,7 +13,7 @@ import {
 import { Button, Input, Label, Card, CardContent, Turnstile } from '@tienda/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { Truck, Store, CreditCard, Landmark, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Truck, Store, CreditCard, Landmark, Wallet, CheckCircle2, ArrowRight } from 'lucide-react';
 
 import { clientFetch } from '@/lib/client-api';
 import { useCart } from '@/lib/cart-context';
@@ -355,7 +355,13 @@ export default function CheckoutPage() {
                     type="radio"
                     name="shippingMethod"
                     checked={shippingMethod === 'delivery'}
-                    onChange={() => setShippingMethod('delivery')}
+                    onChange={() => {
+                      setShippingMethod('delivery');
+                      // El efectivo es sólo para retiro en local: si estaba elegido, se resetea.
+                      if (paymentMethod === 'cash') {
+                        setPaymentMethod(enabledMethods.find((m) => m !== 'cash') ?? 'bank_transfer');
+                      }
+                    }}
                     className="sr-only"
                   />
                   <Truck className="h-5 w-5 text-accent shrink-0" />
@@ -583,8 +589,8 @@ export default function CheckoutPage() {
               {/* Sólo se ofrecen los métodos que el backend tiene realmente
                   configurados: la pasarela de tarjeta se elige desde el servidor. */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {enabledMethods.map((method) => {
-                  const Icon = method === 'bank_transfer' ? Landmark : CreditCard;
+                {(shippingMethod === 'delivery' ? enabledMethods.filter((m) => m !== 'cash') : enabledMethods).map((method) => {
+                  const Icon = method === 'bank_transfer' ? Landmark : method === 'cash' ? Wallet : CreditCard;
                   return (
                     <label
                       key={method}
@@ -606,7 +612,11 @@ export default function CheckoutPage() {
                       <div>
                         <p className="text-sm font-bold text-foreground">{PAYMENT_METHOD_LABELS[method]}</p>
                         <p className="text-xs text-muted-foreground">
-                          {method === 'bank_transfer' ? 'CBU / Alias bancario' : 'Débito, crédito y cuotas'}
+                          {method === 'bank_transfer'
+                            ? 'CBU / Alias bancario'
+                            : method === 'cash'
+                              ? 'Pagás al retirar en el local'
+                              : 'Débito, crédito y cuotas'}
                         </p>
                       </div>
                     </label>

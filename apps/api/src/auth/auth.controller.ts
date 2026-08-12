@@ -22,6 +22,7 @@ import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import { loginSchema, type LoginDto } from './dto/login.dto';
+import { changePasswordSchema, type ChangePasswordInput } from '@tienda/shared';
 import type { AuthenticatedUser } from './auth.types';
 
 const REFRESH_COOKIE_NAME = 'refresh_token';
@@ -75,6 +76,15 @@ export class AuthController {
   @Get('me')
   async me(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.getSafeUser(user.id);
+  }
+
+  @Post('change-password')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ZodValidationPipe(changePasswordSchema))
+  async changePassword(@CurrentUser() user: AuthenticatedUser, @Body() body: ChangePasswordInput) {
+    await this.authService.changePassword(user.id, body.currentPassword, body.newPassword);
+    return { success: true };
   }
 
   private meta(req: Request) {

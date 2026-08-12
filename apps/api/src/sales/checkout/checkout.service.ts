@@ -13,9 +13,15 @@ import {
   type PaymentPlanLineItem,
   type ResolvedFulfillment,
   type CheckoutPaymentMethod,
+  OFFLINE_PAYMENT_METHODS,
 } from '@tienda/shared';
 import type { Prisma } from '@prisma/client';
 import type { Queue } from 'bullmq';
+
+// Métodos sin pasarela (transferencia, efectivo): no generan checkout de tarjeta,
+// se confirman a mano al recibir el pago. Los distingue de los pagos con tarjeta.
+const isOfflineMethod = (method: CheckoutPaymentMethod): boolean =>
+  (OFFLINE_PAYMENT_METHODS as readonly string[]).includes(method);
 
 import { RenderService } from '../../catalog/customization/render.service';
 import { UploadsService } from '../../catalog/uploads/uploads.service';
@@ -136,9 +142,9 @@ export class CheckoutService {
       }
       const netTotalCents = plan.subtotalCents - discountCents;
 
-      // La transferencia da más tiempo: el cliente tiene que ir al banco.
+      // Los métodos offline dan más tiempo: el cliente va al banco o paga al retirar.
       const reservationMinutes =
-        input.paymentMethod === 'bank_transfer'
+        isOfflineMethod(input.paymentMethod)
           ? this.config.get('BANK_TRANSFER_RESERVATION_TTL_HOURS') * 60
           : this.config.get('CHECKOUT_RESERVATION_TTL_MINUTES');
       const expiresAt = new Date(Date.now() + reservationMinutes * 60_000);
@@ -221,7 +227,7 @@ export class CheckoutService {
     let redirectUrl: string | null = null;
 
     try {
-      if (input.paymentMethod !== 'bank_transfer') {
+      if (!isOfflineMethod(input.paymentMethod)) {
         const provider = this.payments.active();
         const checkout = await provider.createCheckout({
           paymentId: payment.id,
@@ -312,9 +318,9 @@ export class CheckoutService {
         data: { status: 'CANCELLED' },
       });
 
-      // Update reservation expiration time if they chose bank_transfer vs card
+      // Update reservation expiration time if they chose an offline method vs card
       let expiresAt = freshOrder.expiresAt;
-      if (paymentMethod === 'bank_transfer') {
+      if (isOfflineMethod(paymentMethod)) {
         const reservationMinutes = this.config.get('BANK_TRANSFER_RESERVATION_TTL_HOURS') * 60;
         expiresAt = new Date(Date.now() + reservationMinutes * 60_000);
       } else {
@@ -356,7 +362,7 @@ export class CheckoutService {
     let redirectUrl: string | null = null;
 
     try {
-      if (paymentMethod !== 'bank_transfer') {
+      if (!isOfflineMethod(paymentMethod)) {
         const provider = this.payments.active();
         const checkout = await provider.createCheckout({
           paymentId: payment.id,

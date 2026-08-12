@@ -840,6 +840,11 @@ model StoreSettings {
   contactEmail             String?
   pickupAddress            String?  @db.Text
   openingHours             String?
+
+  // Métodos de cobro que ofrece la tienda (se togglean desde Ajustes → Cobros).
+  enableBankTransfer       Boolean  @default(true)
+  enableCardPayment        Boolean  @default(true)
+  enableCash               Boolean  @default(false)
   updatedAt                DateTime @updatedAt
 
   @@map("store_settings")

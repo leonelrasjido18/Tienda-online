@@ -29,6 +29,9 @@ const DEFAULT_SETTINGS: StoreSettingsDto = {
   contactEmail: null,
   pickupAddress: null,
   openingHours: null,
+  enableBankTransfer: true,
+  enableCardPayment: true,
+  enableCash: false,
 };
 
 /**

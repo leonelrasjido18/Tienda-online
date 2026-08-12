@@ -48,6 +48,23 @@ export class AuthService {
     return user;
   }
 
+  /** Cambia la contraseña del staff verificando primero la actual. */
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.staffUser.findUniqueOrThrow({ where: { id: userId } });
+    const matches = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!matches) {
+      throw new UnauthorizedException('La contraseña actual es incorrecta');
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.staffUser.update({ where: { id: userId }, data: { passwordHash } });
+    // Se cierran las demás sesiones para que un acceso viejo no siga vivo.
+    await this.prisma.refreshToken.updateMany({
+      where: { staffUserId: userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return { success: true };
+  }
+
   async login(email: string, password: string, meta: RequestMeta): Promise<IssuedTokens> {
     const user = await this.validateCredentials(email, password);
 

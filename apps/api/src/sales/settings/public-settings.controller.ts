@@ -16,11 +16,24 @@ export class PublicSettingsController {
   @Get()
   async get(): Promise<PublicStoreSettingsDto & { bankTransferInstructions: string | null }> {
     const settings = await this.settings.get();
+
+    // El storefront sólo ofrece lo que está configurado (pasarela con credenciales)
+    // Y activado por la dueña desde Ajustes → Cobros.
+    const configured = this.payments.enabledMethods();
+    const methods: string[] = [];
+    for (const method of configured) {
+      if (method === 'bank_transfer') {
+        if (settings.enableBankTransfer) methods.push(method);
+      } else if (settings.enableCardPayment) {
+        methods.push(method);
+      }
+    }
+    if (settings.enableCash) methods.push('cash');
+
     return {
       defaultDepositPercent: settings.defaultDepositPercent,
       bankTransferInstructions: settings.bankTransferInstructions,
-      // El storefront sólo debe ofrecer lo que realmente está configurado.
-      enabledPaymentMethods: this.payments.enabledMethods(),
+      enabledPaymentMethods: methods,
     };
   }
 }

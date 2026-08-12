@@ -9,6 +9,9 @@ export const updateStoreSettingsSchema = z.object({
   contactEmail: z.string().email().max(200).nullable().optional(),
   pickupAddress: z.string().max(500).nullable().optional(),
   openingHours: z.string().max(200).nullable().optional(),
+  enableBankTransfer: z.boolean().optional(),
+  enableCardPayment: z.boolean().optional(),
+  enableCash: z.boolean().optional(),
 });
 export type UpdateStoreSettingsInput = z.infer<typeof updateStoreSettingsSchema>;
 
@@ -30,5 +33,8 @@ export const storeSettingsSchema = z.object({
   contactEmail: z.string().nullable(),
   pickupAddress: z.string().nullable(),
   openingHours: z.string().nullable(),
+  enableBankTransfer: z.boolean(),
+  enableCardPayment: z.boolean(),
+  enableCash: z.boolean(),
 });
 export type StoreSettingsDto = z.infer<typeof storeSettingsSchema>;
