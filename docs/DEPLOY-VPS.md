@@ -6,8 +6,8 @@ producción. Está dividido en lo **obligatorio para arrancar** y lo **opcional/
 ## Ya definido
 
 - **VPS**: Hostinger, Ubuntu 24.04 LTS, IP `187.77.234.239` (acceso por clave SSH).
-- **Dominio**: `synory.dev` → tienda en `synory.dev`, API en `api.synory.dev`, panel en `admin.synory.dev`.
-  ⚠️ Los dominios `.dev` **exigen HTTPS** (van con TLS obligatorio desde el primer día).
+- **Dominio**: `remerasdelarea.com` → tienda en `remerasdelarea.com`, API en `api.remerasdelarea.com`, panel en `admin.remerasdelarea.com`.
+  El HTTPS lo emite y renueva Caddy automáticamente (Let's Encrypt).
 - **Envíos**: **Correo Argentino** en modo manual (tarifas por provincia cargadas en el panel).
   No se usa Andreani.
 - **Seguridad**: acceso por **clave SSH** (no contraseña en texto), firewall y login endurecido.

@@ -1,11 +1,11 @@
-# Runbook de deploy — VPS (synory.dev)
+# Runbook de deploy — VPS (remerasdelarea.com)
 
 Pasos para poner la tienda en producción en el VPS de Hostinger
 (`187.77.234.239`, Ubuntu 24.04). Se ejecuta una vez; las actualizaciones son el paso 8.
 
 ---
 
-## 1. DNS (en el panel de Hostinger → Administrador de DNS de `synory.dev`)
+## 1. DNS (en el panel de Hostinger → Administrador de DNS de `remerasdelarea.com`)
 
 Crear registros **A** apuntando todos al VPS:
 
@@ -16,7 +16,7 @@ Crear registros **A** apuntando todos al VPS:
 | A    | `api`   | `187.77.234.239` |
 | A    | `admin` | `187.77.234.239` |
 
-> Esperar a que propague (`nslookup api.synory.dev`) antes del paso 6, o Caddy no
+> Esperar a que propague (`nslookup api.remerasdelarea.com`) antes del paso 6, o Caddy no
 > podrá emitir los certificados.
 
 ## 2. Acceso seguro por SSH (clave, no contraseña)
@@ -24,7 +24,7 @@ Crear registros **A** apuntando todos al VPS:
 En **tu máquina** (no en el chat), generá el par de claves y copiá la pública al VPS:
 
 ```bash
-ssh-keygen -t ed25519 -C "deploy-synory"
+ssh-keygen -t ed25519 -C "deploy-remerasdelarea"
 ssh-copy-id root@187.77.234.239        # o pegá la .pub en Hostinger → Clave SSH
 ```
 
@@ -82,7 +82,7 @@ correr el mismo comando con una nueva.
 
 ## 8. Verificar
 
-- https://synory.dev (tienda) · https://admin.synory.dev (panel) · https://api.synory.dev/health → `200`
+- https://remerasdelarea.com (tienda) · https://admin.remerasdelarea.com (panel) · https://api.remerasdelarea.com/health → `200`
 - Candado HTTPS válido en los tres.
 
 ## 9. Backups automáticos

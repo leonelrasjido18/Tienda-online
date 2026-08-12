@@ -5,14 +5,14 @@
 }
 
 # Tienda
-synory.dev, www.synory.dev {
+remerasdelarea.com, www.remerasdelarea.com {
 	encode gzip zstd
 	reverse_proxy storefront:3000
 }
 
 # API. Las fotos (/uploads/*) las sirve Caddy directo desde el volumen, sin pasar
 # por Node; el resto va a la API.
-api.synory.dev {
+api.remerasdelarea.com {
 	encode gzip zstd
 	handle_path /uploads/* {
 		root * /srv/uploads
@@ -22,7 +22,7 @@ api.synory.dev {
 }
 
 # Panel de administración
-admin.synory.dev {
+admin.remerasdelarea.com {
 	encode gzip zstd
 	reverse_proxy admin:3000
 }
