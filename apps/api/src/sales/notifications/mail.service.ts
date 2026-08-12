@@ -37,10 +37,17 @@ export class MailService {
   private readonly notificationEmail: string;
 
   constructor(private readonly config: ConfigService<Env, true>) {
+    const port = this.config.get('SMTP_PORT');
+    const user = this.config.get('SMTP_USER');
+    const pass = this.config.get('SMTP_PASS');
     this.transporter = createTransport({
       host: this.config.get('SMTP_HOST'),
-      port: this.config.get('SMTP_PORT'),
-      secure: false,
+      port,
+      // 465 usa TLS directo; 587 (Brevo) arranca en claro y sube a TLS con STARTTLS.
+      secure: port === 465,
+      // Los SMTP reales (Brevo, Gmail…) exigen autenticación; en dev (Mailpit) no hay
+      // credenciales y se omite el bloque `auth`.
+      ...(user && pass ? { auth: { user, pass } } : {}),
     });
     this.from = this.config.get('SMTP_FROM');
     this.notificationEmail = this.config.get('STORE_NOTIFICATION_EMAIL');

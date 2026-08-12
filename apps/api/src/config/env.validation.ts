@@ -19,6 +19,10 @@ export const envSchema = z.object({
 
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
+  // Credenciales del SMTP real (Brevo, Gmail…). En dev (Mailpit) quedan vacías y no
+  // se envía bloque de autenticación.
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
   SMTP_FROM: z.string().default('Tienda <no-reply@tienda.local>'),
   STORE_NOTIFICATION_EMAIL: z.string().email().default('owner@tienda.local'),
 
