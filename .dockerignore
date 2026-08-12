@@ -1,0 +1,13 @@
+# No mandar al contexto de build lo pesado o local
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/coverage
+**/.git
+**/.env
+**/.env.*
+!**/.env.example
+**/uploads
+**/*.log
+docker/data

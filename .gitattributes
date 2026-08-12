@@ -1,0 +1,8 @@
+# Archivos que corren en Linux (VPS): forzar saltos de línea LF aunque se editen
+# desde Windows, o el shebang y el script se rompen en el servidor.
+*.sh            text eol=lf
+Dockerfile*     text eol=lf
+Caddyfile       text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+.env.*.example  text eol=lf

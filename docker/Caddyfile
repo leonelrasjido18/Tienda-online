@@ -1,0 +1,28 @@
+# Caddy obtiene y renueva los certificados TLS automáticamente (Let's Encrypt).
+# Requisito: los tres subdominios apuntando por DNS a este servidor.
+{
+	email leonelivanrasjido@gmail.com
+}
+
+# Tienda
+synory.dev, www.synory.dev {
+	encode gzip zstd
+	reverse_proxy storefront:3000
+}
+
+# API. Las fotos (/uploads/*) las sirve Caddy directo desde el volumen, sin pasar
+# por Node; el resto va a la API.
+api.synory.dev {
+	encode gzip zstd
+	handle_path /uploads/* {
+		root * /srv/uploads
+		file_server
+	}
+	reverse_proxy api:3001
+}
+
+# Panel de administración
+admin.synory.dev {
+	encode gzip zstd
+	reverse_proxy admin:3000
+}

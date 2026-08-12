@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import type { NextConfig } from 'next';
 
 // Las fotos de producto las sirve la API (`/uploads/...`), no Next.js. `next/image`
@@ -12,6 +14,11 @@ const isLocalApi = ['localhost', '127.0.0.1', '::1'].includes(apiUrl.hostname);
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@tienda/ui'],
+  // Build autocontenido para la imagen Docker (server + node_modules mínimos). En un
+  // monorepo hay que apuntar la raíz de trazado al root para que incluya los paquetes
+  // del workspace (@tienda/ui, @tienda/shared).
+  output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '../..'),
   // Oculta el indicador de desarrollo de Next (la "N" flotante). Sólo aparece en dev.
   devIndicators: false,
   images: {

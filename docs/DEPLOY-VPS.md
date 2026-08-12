@@ -3,6 +3,15 @@
 Lista de **todo lo que tenés que conseguir/pasarme** para poner la tienda online en
 producción. Está dividido en lo **obligatorio para arrancar** y lo **opcional/mejora**.
 
+## Ya definido
+
+- **VPS**: Hostinger, Ubuntu 24.04 LTS, IP `187.77.234.239` (acceso por clave SSH).
+- **Dominio**: `synory.dev` → tienda en `synory.dev`, API en `api.synory.dev`, panel en `admin.synory.dev`.
+  ⚠️ Los dominios `.dev` **exigen HTTPS** (van con TLS obligatorio desde el primer día).
+- **Envíos**: **Correo Argentino** en modo manual (tarifas por provincia cargadas en el panel).
+  No se usa Andreani.
+- **Seguridad**: acceso por **clave SSH** (no contraseña en texto), firewall y login endurecido.
+
 Convención:
 - 🔴 **Obligatorio** — sin esto no se puede salir a vender.
 - 🟡 **Opcional** — la tienda funciona sin esto (hay un modo alternativo), se puede sumar después.
@@ -62,10 +71,11 @@ correo transaccional (Brevo, Resend, SendGrid, Zoho…):
 
 - [ ] `ANTHROPIC_API_KEY` (para el botón "Analizar con IA"). Confirmar el `ANTHROPIC_MODEL` vigente.
 
-## 8. Cotización de envíos automática 🟡
+## 8. Envíos — Correo Argentino (modo manual) ✅
 
-- [ ] **Andreani**: `ANDREANI_USER`, `ANDREANI_PASSWORD`, `ANDREANI_CLIENTE`, `ANDREANI_CONTRATO`.
-      Sin esto queda el **modo manual** con tarifas por provincia (ya funciona).
+- Se usa **Correo Argentino** con el **modo manual**: cargás las tarifas por provincia
+  en el panel y despachás vos, ingresando el tracking a mano. **Ya está construido, no
+  requiere credenciales.** (Andreani descartado.)
 
 ## 9. Anti-bot (CAPTCHA) 🟡
 
