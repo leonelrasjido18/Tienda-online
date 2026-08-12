@@ -16,7 +16,7 @@ export interface ShippingQuoteRequest {
  * proveedor es cambiar la implementación registrada y nada más.
  */
 export interface ShippingProvider {
-  readonly name: 'manual' | 'andreani';
+  readonly name: 'manual' | 'andreani' | 'correo_argentino';
   quote(request: ShippingQuoteRequest): Promise<ShippingQuoteDto>;
   createLabel?(orderId: string, address: {
     street: string;

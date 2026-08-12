@@ -59,12 +59,21 @@ export const envSchema = z.object({
   BANK_TRANSFER_RESERVATION_TTL_HOURS: z.coerce.number().int().positive().default(48),
 
   // Envíos. 'manual' usa la tabla de tarifas por provincia del panel y no depende
-  // de nadie; 'andreani' requiere las cuatro credenciales de abajo.
-  SHIPPING_PROVIDER: z.enum(['manual', 'andreani']).default('manual'),
+  // de nadie; 'andreani' y 'correo_argentino' cotizan por API con las credenciales de abajo.
+  SHIPPING_PROVIDER: z.enum(['manual', 'andreani', 'correo_argentino']).default('manual'),
   ANDREANI_USER: z.string().default(''),
   ANDREANI_PASSWORD: z.string().default(''),
   ANDREANI_CLIENTE: z.string().default(''),
   ANDREANI_CONTRATO: z.string().default(''),
+
+  // Correo Argentino — API MiCorreo (cotización por código postal).
+  // CORREO_USER/PASSWORD: credenciales de API (se piden a Correo). CUSTOMER_ID:
+  // opcional, si se deja vacío se obtiene con /users/validate. ORIGIN: CP de origen.
+  CORREO_ENV: z.enum(['test', 'production']).default('test'),
+  CORREO_USER: z.string().default(''),
+  CORREO_PASSWORD: z.string().default(''),
+  CORREO_CUSTOMER_ID: z.string().default(''),
+  CORREO_POSTAL_CODE_ORIGIN: z.string().default(''),
 
   /** Días de vigencia del link de cobro del saldo. */
   BALANCE_LINK_TTL_DAYS: z.coerce.number().int().positive().default(14),

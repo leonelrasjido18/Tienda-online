@@ -4,10 +4,10 @@ import { moneyCentsSchema } from '../catalog/common.schema';
 
 /**
  * Proveedores de envío disponibles. `manual` usa la tabla de tarifas por provincia
- * y funciona sin depender de nadie; `andreani` se enchufa detrás de la misma
- * interfaz cuando haya credenciales.
+ * y funciona sin depender de nadie; `andreani` y `correo_argentino` se enchufan
+ * detrás de la misma interfaz cuando haya credenciales.
  */
-export const SHIPPING_PROVIDERS = ['manual', 'andreani'] as const;
+export const SHIPPING_PROVIDERS = ['manual', 'andreani', 'correo_argentino'] as const;
 export type ShippingProviderName = (typeof SHIPPING_PROVIDERS)[number];
 
 export const upsertShippingRateSchema = z.object({
