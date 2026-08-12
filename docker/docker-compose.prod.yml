@@ -1,8 +1,11 @@
 name: tienda-online-prod
 
-# Ejecutar desde esta carpeta:
+# Deploy detrás del nginx que ya corre en el VPS (no usamos Caddy: nginx es dueño de
+# 80/443). Las apps se publican SOLO en localhost y nginx las toma como proxy inverso.
 #   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
-# El --env-file alimenta la interpolación ${...} (build-args, credenciales de la base).
+#
+# Postgres y Redis NO exponen puertos al host: viven en la red interna del compose,
+# así no chocan con el Postgres que ya tiene el servidor.
 
 services:
   postgres:
@@ -43,10 +46,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      # Las fotos subidas persisten fuera del contenedor (y Caddy las sirve desde acá).
       - uploads_data:/app/apps/api/uploads
-    expose:
-      - '3001'
+    ports:
+      - '127.0.0.1:8081:3001'
 
   storefront:
     build:
@@ -62,8 +64,8 @@ services:
     restart: unless-stopped
     depends_on:
       - api
-    expose:
-      - '3000'
+    ports:
+      - '127.0.0.1:8080:3000'
 
   admin:
     build:
@@ -75,28 +77,10 @@ services:
     restart: unless-stopped
     depends_on:
       - api
-    expose:
-      - '3000'
-
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
     ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - uploads_data:/srv/uploads:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - storefront
-      - admin
-      - api
+      - '127.0.0.1:8082:3000'
 
 volumes:
   postgres_data:
   redis_data:
   uploads_data:
-  caddy_data:
-  caddy_config:

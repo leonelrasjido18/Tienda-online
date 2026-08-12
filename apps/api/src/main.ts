@@ -15,6 +15,10 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService<Env, true>);
 
+  // Detrás de nginx (un solo salto): confía en X-Forwarded-For para que el rate
+  // limiting y la verificación de Turnstile vean la IP real del cliente, no la del proxy.
+  app.set('trust proxy', 1);
+
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.useBodyParser('json', { limit: '100kb' });
 
