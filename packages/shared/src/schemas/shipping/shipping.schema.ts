@@ -27,6 +27,14 @@ export const shippingRateSchema = z.object({
 });
 export type ShippingRateDto = z.infer<typeof shippingRateSchema>;
 
+/** Cuerpo de la cotización en vivo del checkout: el CP de destino (y provincia). */
+export const publicShippingQuoteSchema = z.object({
+  postalCode: z.string().trim().min(4).max(8),
+  province: z.string().trim().max(120).nullish(),
+  city: z.string().trim().max(120).nullish(),
+});
+export type PublicShippingQuoteInput = z.infer<typeof publicShippingQuoteSchema>;
+
 /** Resultado de cotizar un envío, sea cual sea el proveedor. */
 export const shippingQuoteSchema = z.object({
   provider: z.enum(SHIPPING_PROVIDERS),

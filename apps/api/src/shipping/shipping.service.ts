@@ -39,6 +39,38 @@ export class ShippingService {
     return this.provider.quote(request);
   }
 
+  /**
+   * Cotización en vivo para el checkout: por CP de destino + el carrito actual
+   * (peso y valor declarado calculados server-side, nunca desde el cliente).
+   */
+  async quoteForCart(
+    sessionToken: string | undefined,
+    addr: { postalCode: string; province: string | null; city: string | null },
+  ): Promise<ShippingQuoteDto> {
+    const cart = sessionToken ? await this.prisma.cart.findUnique({ where: { sessionToken } }) : null;
+
+    // 350 g es el peso típico de una camiseta: sirve de piso si falta el dato.
+    let weightGrams = 350;
+    let declaredValueCents = 0;
+    if (cart && cart.expiresAt >= new Date()) {
+      const items = await this.prisma.cartItem.findMany({
+        where: { cartId: cart.id },
+        include: { variant: true },
+      });
+      const w = items.reduce((sum, item) => sum + (item.variant?.weightGrams ?? 350) * item.quantity, 0);
+      weightGrams = w || 350;
+      declaredValueCents = items.reduce((sum, item) => sum + item.priceCentsAtAdd * item.quantity, 0);
+    }
+
+    return this.provider.quote({
+      province: addr.province,
+      postalCode: addr.postalCode,
+      city: addr.city,
+      weightGrams,
+      declaredValueCents,
+    });
+  }
+
   listRates() {
     return this.prisma.shippingRate.findMany({ orderBy: { province: 'asc' } });
   }

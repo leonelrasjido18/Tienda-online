@@ -5,12 +5,13 @@ import type { Env } from '../config/env.validation';
 import { AndreaniShippingProvider } from './andreani-shipping.provider';
 import { CorreoArgentinoShippingProvider } from './correo-argentino-shipping.provider';
 import { ManualShippingProvider } from './manual-shipping.provider';
+import { PublicShippingController } from './public-shipping.controller';
 import { ShippingController } from './shipping.controller';
 import { ShippingService } from './shipping.service';
 import { SHIPPING_PROVIDER } from './shipping-provider.interface';
 
 @Module({
-  controllers: [ShippingController],
+  controllers: [ShippingController, PublicShippingController],
   providers: [
     ManualShippingProvider,
     AndreaniShippingProvider,

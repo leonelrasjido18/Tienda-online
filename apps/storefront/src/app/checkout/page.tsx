@@ -50,6 +50,12 @@ export default function CheckoutPage() {
   const [province, setProvince] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
+  const [shippingQuote, setShippingQuote] = useState<{
+    priceCents: number;
+    etaDays: number | null;
+    fallbackReason: string | null;
+  } | null>(null);
+  const [isQuoting, setIsQuoting] = useState(false);
 
   // La transferencia siempre está disponible, así que sirve de valor inicial
   // seguro hasta que el servidor diga qué pasarela está activa.
@@ -64,6 +70,38 @@ export default function CheckoutPage() {
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountCents: number; freeShipping: boolean } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
+  // Cotización de envío en vivo: al escribir el CP (con un pequeño retardo) pregunta
+  // el costo al proveedor activo. Todo el setState va dentro del timeout para no
+  // disparar la regla de setState síncrono en efecto.
+  useEffect(() => {
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      const cp = postalCode.trim();
+      if (shippingMethod !== 'delivery' || cp.length < 4) {
+        if (!cancelled) setShippingQuote(null);
+        return;
+      }
+      if (!cancelled) setIsQuoting(true);
+      clientFetch<{ priceCents: number; etaDays: number | null; fallbackReason: string | null }>('/shipping/quote', {
+        method: 'POST',
+        body: JSON.stringify({ postalCode: cp, province: province || undefined, city: city || undefined }),
+      })
+        .then((res) => {
+          if (!cancelled) setShippingQuote(res);
+        })
+        .catch(() => {
+          if (!cancelled) setShippingQuote(null);
+        })
+        .finally(() => {
+          if (!cancelled) setIsQuoting(false);
+        });
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [postalCode, province, city, shippingMethod]);
 
   useEffect(() => {
     let cancelled = false;
@@ -401,6 +439,24 @@ export default function CheckoutPage() {
                       value={postalCode}
                       onChange={(e) => setPostalCode(e.target.value)}
                     />
+                    {(isQuoting || shippingQuote) && (
+                      <div className="mt-1 rounded-md border border-border bg-background px-3 py-2 text-sm">
+                        {isQuoting ? (
+                          <span className="text-muted-foreground">Calculando costo de envío…</span>
+                        ) : shippingQuote && shippingQuote.priceCents > 0 ? (
+                          <span className="font-semibold text-foreground">
+                            Envío: {formatCentsAsArs(shippingQuote.priceCents)}
+                            {shippingQuote.etaDays ? (
+                              <span className="font-normal text-muted-foreground"> · llega en ~{shippingQuote.etaDays} días</span>
+                            ) : null}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Coordinamos el costo de envío al confirmar tu pedido.
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
