@@ -24,6 +24,7 @@ import {
   type ImportBatchSummaryDto,
 } from '@tienda/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -81,19 +82,20 @@ export default function BatchesPage() {
               <TableHead>Pedidos</TableHead>
               <TableHead>Saldo pendiente</TableHead>
               <TableHead>Creado</TableHead>
+              <TableHead className="w-16 text-right">Editar</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   Cargando…
                 </TableCell>
               </TableRow>
             )}
             {batches?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   Todavía no hay lotes. Creá uno cuando tengas pedidos por encargo para agrupar.
                 </TableCell>
               </TableRow>
@@ -115,6 +117,16 @@ export default function BatchesPage() {
                 <TableCell className="text-muted-foreground">{formatCentsAsArs(batch.pendingBalanceCents)}</TableCell>
                 <TableCell className="text-muted-foreground">
                   {new Date(batch.createdAt).toLocaleDateString('es-AR')}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Link
+                    href={`/dashboard/lotes/${batch.id}`}
+                    title="Editar lote"
+                    aria-label="Editar lote"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Link>
                 </TableCell>
               </TableRow>
             ))}
