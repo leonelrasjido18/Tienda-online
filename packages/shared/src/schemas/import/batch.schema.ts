@@ -44,6 +44,8 @@ export const createImportBatchSchema = z.object({
   supplier: z.string().trim().max(120).nullish(),
   closesAt: z.string().datetime().nullish(),
   etaDate: z.string().datetime().nullish(),
+  promisedDeliveryDays: z.number().int().min(1).max(120).nullish(),
+  minUnits: z.number().int().min(1).max(10000).optional(),
   notes: z.string().max(2000).nullish(),
 });
 export type CreateImportBatchInput = z.infer<typeof createImportBatchSchema>;
@@ -52,6 +54,8 @@ export const updateImportBatchSchema = z.object({
   supplier: z.string().trim().max(120).nullish(),
   closesAt: z.string().datetime().nullish(),
   etaDate: z.string().datetime().nullish(),
+  promisedDeliveryDays: z.number().int().min(1).max(120).nullish(),
+  minUnits: z.number().int().min(1).max(10000).optional(),
   trackingRef: z.string().trim().max(120).nullish(),
   freightCents: moneyCentsSchema.nullish(),
   customsCents: moneyCentsSchema.nullish(),
@@ -59,6 +63,17 @@ export const updateImportBatchSchema = z.object({
   notes: z.string().max(2000).nullish(),
 });
 export type UpdateImportBatchInput = z.infer<typeof updateImportBatchSchema>;
+
+/** Marca (o desmarca) el lote como la ventana de encargo pública activa. */
+export const setActiveWindowSchema = z.object({ isActive: z.boolean() });
+export type SetActiveWindowInput = z.infer<typeof setActiveWindowSchema>;
+
+/** Ventana de encargo activa, para la cuenta regresiva pública del storefront. */
+export const activePreorderWindowSchema = z.object({
+  closesAt: z.string(),
+  promisedDeliveryDays: z.number().int().nullable(),
+});
+export type ActivePreorderWindowDto = z.infer<typeof activePreorderWindowSchema>;
 
 export const advanceImportBatchSchema = z.object({
   status: z.enum(IMPORT_BATCH_STATUSES),
@@ -83,6 +98,11 @@ export const importBatchSummarySchema = z.object({
   etaDate: z.string().nullable(),
   receivedAt: z.string().nullable(),
   orderCount: z.number().int(),
+  /** Total de prendas por encargo en el lote, para el progreso hacia el mínimo. */
+  unitCount: z.number().int(),
+  isActive: z.boolean(),
+  promisedDeliveryDays: z.number().int().nullable(),
+  minUnits: z.number().int(),
   /** Suma de saldos pendientes de los pedidos del lote. */
   pendingBalanceCents: z.number().int(),
   createdAt: z.string(),

@@ -12,6 +12,7 @@ import { BatchesController } from './batches.controller';
 import { BatchesService } from './batches.service';
 import { ProductionSheetController } from './production-sheet.controller';
 import { ProductionSheetService } from './production-sheet.service';
+import { PublicPreorderController } from './public-preorder.controller';
 import { BALANCE_REMINDERS_QUEUE } from './import-queue.constants';
 import { BalanceRemindersProcessor } from './balance-reminders.processor';
 
@@ -22,7 +23,13 @@ import { BalanceRemindersProcessor } from './balance-reminders.processor';
     PaymentsModule,
     BullModule.registerQueue({ name: BALANCE_REMINDERS_QUEUE }),
   ],
-  controllers: [BatchesController, BalanceController, BalanceRemindersController, ProductionSheetController],
+  controllers: [
+    BatchesController,
+    BalanceController,
+    BalanceRemindersController,
+    ProductionSheetController,
+    PublicPreorderController,
+  ],
   providers: [
     BatchesService,
     BalanceService,

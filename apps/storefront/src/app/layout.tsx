@@ -4,8 +4,10 @@ import { ThemeScript } from '@tienda/ui';
 
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
+import { PreorderBanner } from '@/components/preorder-banner';
 import { AnalyticsScripts } from '@/components/analytics-scripts';
 import { CartProvider } from '@/lib/cart-context';
+import { getPreorderWindow } from '@/lib/api-safe';
 import { siteConfig } from '@/lib/site-config';
 
 import './globals.css';
@@ -35,7 +37,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<'/'>) {
+export default async function RootLayout({ children }: LayoutProps<'/'>) {
+  const preorderWindow = await getPreorderWindow();
   return (
     <html lang="es" className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
@@ -44,6 +47,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       <AnalyticsScripts />
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <CartProvider>
+          <PreorderBanner window={preorderWindow} />
           <SiteHeader />
           <main className="flex-1">{children}</main>
           <SiteFooter />

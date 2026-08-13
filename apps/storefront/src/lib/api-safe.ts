@@ -1,4 +1,4 @@
-import type { StoreSettingsDto } from '@tienda/shared';
+import type { ActivePreorderWindowDto, StoreSettingsDto } from '@tienda/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -41,4 +41,9 @@ const DEFAULT_SETTINGS: StoreSettingsDto = {
 export async function getStoreSettings(): Promise<StoreSettingsDto> {
   const data = await apiFetchSafe<StoreSettingsDto>('/settings');
   return data ?? DEFAULT_SETTINGS;
+}
+
+/** Ventana de encargo activa (para la cuenta regresiva). Null si no hay ninguna. */
+export async function getPreorderWindow(): Promise<ActivePreorderWindowDto | null> {
+  return apiFetchSafe<ActivePreorderWindowDto>('/preorder/window');
 }

@@ -882,11 +882,20 @@ model ImportBatch {
   supplier String?
   status   ImportBatchStatus @default(OPEN)
 
-  /// Fecha tope para sumar pedidos nuevos a este lote.
+  /// Fecha tope para sumar pedidos nuevos a este lote (la cuenta regresiva pública).
   closesAt    DateTime?
   /// Llegada estimada. Se comunica al cliente como rango, nunca como fecha exacta.
   etaDate     DateTime?
   trackingRef String?
+
+  /// Ventana de encargo pública: sólo una puede estar activa a la vez. Mientras lo
+  /// esté (y closesAt sea futuro), la tienda muestra la cuenta regresiva y los
+  /// pedidos por encargo se suman solos a este lote.
+  isActive Boolean @default(false)
+  /// Días de llegada prometidos, contados desde el cierre de la ventana (ej. 20).
+  promisedDeliveryDays Int?
+  /// Cupo mínimo de unidades para disparar el pedido (sólo visible en el panel).
+  minUnits Int @default(12)
 
   /// Costos de importación del lote completo, para calcular rentabilidad.
   freightCents  Int?

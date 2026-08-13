@@ -9,13 +9,16 @@ import {
   type ImportBatchSummaryDto,
   type UpdateImportBatchInput,
 } from '@tienda/shared';
-import type { ImportBatch, Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { BalanceService } from './balance.service';
 
 const BATCH_INCLUDE = {
-  orders: { include: { items: { select: { id: true } } }, orderBy: { number: 'asc' as const } },
+  orders: {
+    include: { items: { select: { id: true, quantity: true, fulfillmentMode: true } } },
+    orderBy: { number: 'asc' as const },
+  },
   events: { orderBy: { createdAt: 'asc' as const } },
 } satisfies Prisma.ImportBatchInclude;
 
@@ -78,6 +81,8 @@ export class BatchesService {
         supplier: input.supplier ?? null,
         closesAt: input.closesAt ? new Date(input.closesAt) : null,
         etaDate: input.etaDate ? new Date(input.etaDate) : null,
+        promisedDeliveryDays: input.promisedDeliveryDays ?? null,
+        ...(input.minUnits !== undefined ? { minUnits: input.minUnits } : {}),
         notes: input.notes ?? null,
         events: { create: { type: 'created', message: 'Lote creado' } },
       },
@@ -93,6 +98,8 @@ export class BatchesService {
         supplier: input.supplier ?? null,
         closesAt: input.closesAt ? new Date(input.closesAt) : null,
         etaDate: input.etaDate ? new Date(input.etaDate) : null,
+        promisedDeliveryDays: input.promisedDeliveryDays ?? null,
+        ...(input.minUnits !== undefined ? { minUnits: input.minUnits } : {}),
         trackingRef: input.trackingRef ?? null,
         freightCents: input.freightCents ?? null,
         customsCents: input.customsCents ?? null,
@@ -101,6 +108,40 @@ export class BatchesService {
       },
     });
     return this.detail(id);
+  }
+
+  /**
+   * Marca este lote como la ventana de encargo pública activa. Sólo una puede
+   * estarlo: al activar una, se desactivan las demás.
+   */
+  async setActive(id: string, isActive: boolean) {
+    await this.findOrThrow(id);
+    await this.prisma.$transaction(async (tx) => {
+      if (isActive) {
+        await tx.importBatch.updateMany({ where: { isActive: true, id: { not: id } }, data: { isActive: false } });
+      }
+      await tx.importBatch.update({ where: { id }, data: { isActive } });
+    });
+    return this.detail(id);
+  }
+
+  /** Ventana de encargo activa para el storefront (cuenta regresiva). Null si no hay. */
+  async getActiveWindow(): Promise<{ closesAt: string; promisedDeliveryDays: number | null } | null> {
+    const batch = await this.prisma.importBatch.findFirst({
+      where: { isActive: true, status: 'OPEN', closesAt: { gt: new Date() } },
+      orderBy: { closesAt: 'asc' },
+    });
+    if (!batch || !batch.closesAt) return null;
+    return { closesAt: batch.closesAt.toISOString(), promisedDeliveryDays: batch.promisedDeliveryDays };
+  }
+
+  /** Id de la ventana activa para auto-asignar pedidos por encargo en el checkout. */
+  async getActiveWindowId(): Promise<string | null> {
+    const batch = await this.prisma.importBatch.findFirst({
+      where: { isActive: true, status: 'OPEN', closesAt: { gt: new Date() } },
+      select: { id: true },
+    });
+    return batch?.id ?? null;
   }
 
   /** Pedidos por encargo con la seña ya cobrada y todavía sin lote asignado. */
@@ -211,7 +252,14 @@ export class BatchesService {
     return batch;
   }
 
-  private toSummary(batch: BatchWithRelations | (ImportBatch & { orders: { balanceCents: number | null }[] })): ImportBatchSummaryDto {
+  private toSummary(batch: BatchWithRelations): ImportBatchSummaryDto {
+    // Unidades por encargo del lote: la suma de cantidades de los ítems PREORDER,
+    // para medir el progreso hacia el cupo mínimo.
+    const unitCount = batch.orders.reduce(
+      (sum, order) =>
+        sum + order.items.filter((i) => i.fulfillmentMode === 'PREORDER').reduce((s, i) => s + i.quantity, 0),
+      0,
+    );
     return {
       id: batch.id,
       code: batch.code,
@@ -221,6 +269,10 @@ export class BatchesService {
       etaDate: batch.etaDate?.toISOString() ?? null,
       receivedAt: batch.receivedAt?.toISOString() ?? null,
       orderCount: batch.orders.length,
+      unitCount,
+      isActive: batch.isActive,
+      promisedDeliveryDays: batch.promisedDeliveryDays,
+      minUnits: batch.minUnits,
       pendingBalanceCents: batch.orders.reduce((sum, order) => sum + (order.balanceCents ?? 0), 0),
       createdAt: batch.createdAt.toISOString(),
     };

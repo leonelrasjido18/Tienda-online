@@ -497,6 +497,17 @@ export class OrdersService {
         }
       }
 
+      // Al cobrar la seña de un pedido por encargo, se suma solo a la ventana de
+      // encargo activa (si hay una abierta y sin lote ya asignado a mano).
+      let importBatchId: string | undefined;
+      if (!isBalance && hasPreorderItems && !currentOrder.importBatchId) {
+        const activeWindow = await tx.importBatch.findFirst({
+          where: { isActive: true, status: 'OPEN', closesAt: { gt: new Date() } },
+          select: { id: true },
+        });
+        importBatchId = activeWindow?.id;
+      }
+
       const updated = await tx.order.update({
         where: { id: currentOrder.id },
         data: {
@@ -506,6 +517,7 @@ export class OrdersService {
             : hasPreorderItems
               ? 'AWAITING_IMPORT'
               : currentOrder.fulfillmentStatus,
+          ...(importBatchId ? { importBatchId } : {}),
           expiresAt: null,
         },
       });

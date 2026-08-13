@@ -4,11 +4,13 @@ import {
   assignOrdersSchema,
   createImportBatchSchema,
   markBalancePaidSchema,
+  setActiveWindowSchema,
   updateImportBatchSchema,
   type AdvanceImportBatchInput,
   type AssignOrdersInput,
   type CreateImportBatchInput,
   type MarkBalancePaidInput,
+  type SetActiveWindowInput,
   type UpdateImportBatchInput,
 } from '@tienda/shared';
 
@@ -68,6 +70,13 @@ export class BatchesController {
   @UsePipes(new ZodValidationPipe(advanceImportBatchSchema))
   advance(@Param('id') id: string, @Body() body: AdvanceImportBatchInput) {
     return this.batches.advance(id, body.status);
+  }
+
+  /** Activa/desactiva este lote como la ventana de encargo pública. */
+  @Patch(':id/active')
+  @UsePipes(new ZodValidationPipe(setActiveWindowSchema))
+  setActive(@Param('id') id: string, @Body() body: SetActiveWindowInput) {
+    return this.batches.setActive(id, body.isActive);
   }
 
   /** Marca manual del saldo (transferencia recibida por fuera del sistema). */

@@ -8,6 +8,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Input,
+  Label,
   Table,
   TableBody,
   TableCell,
@@ -115,6 +117,8 @@ export default function BatchDetailPage() {
         </div>
         <Badge>{IMPORT_BATCH_STATUS_LABELS[batch.status]}</Badge>
       </div>
+
+      <PreorderWindowSection batch={batch} batchId={params.id} />
 
       <section className="rounded-lg border border-border bg-background p-4">
         <h2 className="mb-3 text-sm font-semibold">Avanzar el lote</h2>
@@ -292,5 +296,136 @@ export default function BatchDetailPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** Convierte un ISO a valor para <input type="datetime-local"> en hora local. */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function PreorderWindowSection({ batch, batchId }: { batch: ImportBatchDetailDto; batchId: string }) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const batchKey = ['admin', 'batches', batchId];
+
+  const [closesAtLocal, setClosesAtLocal] = useState(toLocalInput(batch.closesAt));
+  const [promisedDays, setPromisedDays] = useState((batch.promisedDeliveryDays ?? 20).toString());
+  const [minUnits, setMinUnits] = useState(batch.minUnits.toString());
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const onUpdated = (updated: ImportBatchDetailDto) => {
+    queryClient.setQueryData(batchKey, updated);
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'batches'] });
+  };
+
+  const activeMutation = useMutation({
+    mutationFn: (isActive: boolean) =>
+      api<ImportBatchDetailDto>(`/admin/batches/${batchId}/active`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive }),
+      }),
+    onSuccess: onUpdated,
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'No se pudo activar la ventana'),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      // Se reenvían los valores actuales para no borrar el resto (el update reemplaza todo).
+      api<ImportBatchDetailDto>(`/admin/batches/${batchId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          supplier: batch.supplier,
+          closesAt: closesAtLocal ? new Date(closesAtLocal).toISOString() : null,
+          etaDate: batch.etaDate,
+          promisedDeliveryDays: Number(promisedDays) || null,
+          minUnits: Number(minUnits) || 12,
+          trackingRef: batch.trackingRef,
+          freightCents: batch.freightCents,
+          customsCents: batch.customsCents,
+          otherfeeCents: batch.otherfeeCents,
+          notes: batch.notes,
+        }),
+      }),
+    onSuccess: (updated) => {
+      setError(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      onUpdated(updated);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'No se pudo guardar la ventana'),
+  });
+
+  const pct = batch.minUnits > 0 ? Math.min(100, Math.round((batch.unitCount / batch.minUnits) * 100)) : 0;
+  const reached = batch.unitCount >= batch.minUnits;
+  const closesPassed = batch.closesAt ? new Date(batch.closesAt) < new Date() : false;
+
+  return (
+    <section className="space-y-4 rounded-lg border border-border bg-background p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Ventana de encargo</h2>
+        {batch.isActive ? (
+          <Button size="sm" variant="outline" disabled={activeMutation.isPending} onClick={() => activeMutation.mutate(false)}>
+            Desactivar ventana
+          </Button>
+        ) : (
+          <Button size="sm" disabled={activeMutation.isPending || batch.status !== 'OPEN'} onClick={() => activeMutation.mutate(true)}>
+            Activar como ventana pública
+          </Button>
+        )}
+      </div>
+
+      {batch.isActive && (
+        <p className="text-xs text-emerald-600">
+          Esta es la ventana pública: la tienda muestra la cuenta regresiva y los pedidos por encargo se suman solos acá.
+          {closesPassed && ' ⚠️ El cierre ya pasó: la cuenta regresiva no se muestra.'}
+        </p>
+      )}
+
+      {/* Progreso hacia el cupo mínimo (sólo lo ve el panel). */}
+      <div>
+        <div className="mb-1 flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Progreso del cupo</span>
+          <span className={reached ? 'font-semibold text-emerald-600' : 'font-semibold text-foreground'}>
+            {batch.unitCount} / {batch.minUnits} unidades
+          </span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div className={'h-full rounded-full ' + (reached ? 'bg-emerald-500' : 'bg-primary')} style={{ width: `${pct}%` }} />
+        </div>
+        {!reached && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Faltan {batch.minUnits - batch.unitCount} para llegar al mínimo. Podés extender el cierre para que se llene.
+          </p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5 sm:col-span-1">
+          <Label htmlFor="closesAt">Cierre (cuenta regresiva)</Label>
+          <Input id="closesAt" type="datetime-local" value={closesAtLocal} onChange={(e) => setClosesAtLocal(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="promisedDays">Días de llegada (tras el cierre)</Label>
+          <Input id="promisedDays" type="number" min={1} value={promisedDays} onChange={(e) => setPromisedDays(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="minUnits">Cupo mínimo (unidades)</Label>
+          <Input id="minUnits" type="number" min={1} value={minUnits} onChange={(e) => setMinUnits(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button size="sm" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+          {saveMutation.isPending ? 'Guardando…' : 'Guardar ventana'}
+        </Button>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {saved && <p className="text-sm text-emerald-600">Guardado.</p>}
+      </div>
+    </section>
   );
 }
