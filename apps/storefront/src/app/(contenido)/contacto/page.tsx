@@ -1,6 +1,7 @@
 import { getStoreSettings } from '@/lib/api-safe';
-import { Card, CardContent, buttonVariants } from '@tienda/ui';
+import { buttonVariants } from '@tienda/ui';
 import { MessageSquare, Mail, MapPin, Clock, Instagram } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 export const metadata = {
   title: 'Atención al Cliente y Contacto',
@@ -15,106 +16,103 @@ export default async function ContactoPage() {
     : null;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Contacto y Atención</h1>
-        <p className="mt-2 text-base text-muted-foreground">
-          Estamos para despejar tus dudas sobre talles, personalización y estado de tus pedidos.
+    <div className="mx-auto max-w-3xl space-y-10">
+      <header className="border-b border-border pb-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Atención al cliente</p>
+        <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">Contacto y atención</h1>
+        <p className="mt-3 max-w-xl text-base leading-relaxed text-muted-foreground">
+          Estamos para despejar tus dudas sobre talles, personalización y el estado de tus pedidos. Te respondemos
+          lo antes posible.
         </p>
-      </div>
+      </header>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <Card className="border border-border">
-          <CardContent className="p-6 space-y-4">
-            <h2 className="text-lg font-bold text-foreground">Vías de contacto rápido</h2>
+        <section className="flex flex-col rounded-xl border border-border bg-card p-6">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vías de contacto</h2>
 
+          <ul className="mt-5 divide-y divide-border">
             {whatsappUrl && (
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <MessageSquare className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">WhatsApp directo</p>
-                  <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-foreground hover:underline">
-                    {settings.whatsappPhone}
-                  </a>
-                </div>
-              </div>
+              <ContactRow icon={<MessageSquare className="h-4 w-4" />} label="WhatsApp" value={settings.whatsappPhone!} href={whatsappUrl} external />
             )}
-
             {settings.contactEmail && (
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                  <Mail className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Correo electrónico</p>
-                  <a href={`mailto:${settings.contactEmail}`} className="text-sm font-bold text-foreground hover:underline">
-                    {settings.contactEmail}
-                  </a>
-                </div>
-              </div>
+              <ContactRow icon={<Mail className="h-4 w-4" />} label="Correo electrónico" value={settings.contactEmail} href={`mailto:${settings.contactEmail}`} />
             )}
-
             {settings.instagramUser && (
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-pink-500/10 text-pink-600 dark:text-pink-400">
-                  <Instagram className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Instagram oficial</p>
-                  <a href={`https://instagram.com/${settings.instagramUser}`} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-foreground hover:underline">
-                    @{settings.instagramUser}
-                  </a>
-                </div>
-              </div>
+              <ContactRow
+                icon={<Instagram className="h-4 w-4" />}
+                label="Instagram"
+                value={`@${settings.instagramUser}`}
+                href={`https://instagram.com/${settings.instagramUser}`}
+                external
+              />
             )}
+          </ul>
 
-            {whatsappUrl && (
-              <div className="pt-2">
-                <a
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={buttonVariants({ className: 'w-full gap-2 font-bold' })}
-                >
-                  <MessageSquare className="h-4 w-4" /> Enviar mensaje por WhatsApp
-                </a>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          {whatsappUrl && (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ className: 'mt-6 w-full gap-2 font-semibold' })}
+            >
+              <MessageSquare className="h-4 w-4" /> Escribinos por WhatsApp
+            </a>
+          )}
+        </section>
 
         {settings.pickupAddress && (
-          <Card className="border border-border">
-            <CardContent className="p-6 space-y-4">
-              <h2 className="text-lg font-bold text-foreground">Retiro en local</h2>
+          <section className="rounded-xl border border-border bg-card p-6">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Retiro en local</h2>
 
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent-foreground">
-                  <MapPin className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Dirección de retiro</p>
-                  <p className="text-sm font-bold text-foreground">{settings.pickupAddress}</p>
-                </div>
-              </div>
-
+            <ul className="mt-5 divide-y divide-border">
+              <ContactRow icon={<MapPin className="h-4 w-4" />} label="Dirección" value={settings.pickupAddress} />
               {settings.openingHours && (
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent-foreground">
-                    <Clock className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Horarios de atención</p>
-                    <p className="text-sm font-bold text-foreground">{settings.openingHours}</p>
-                  </div>
-                </div>
+                <ContactRow icon={<Clock className="h-4 w-4" />} label="Horarios" value={settings.openingHours} />
               )}
-            </CardContent>
-          </Card>
+            </ul>
+          </section>
         )}
       </div>
     </div>
+  );
+}
+
+function ContactRow({
+  icon,
+  label,
+  value,
+  href,
+  external,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  href?: string;
+  external?: boolean;
+}) {
+  const content = (
+    <div className="flex items-center gap-4 py-4">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border text-accent">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="truncate text-sm font-semibold text-foreground">{value}</p>
+      </div>
+    </div>
+  );
+
+  if (!href) return <li>{content}</li>;
+
+  return (
+    <li>
+      <a
+        href={href}
+        {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+        className="-mx-2 block rounded-lg px-2 transition-colors hover:bg-secondary"
+      >
+        {content}
+      </a>
+    </li>
   );
 }
