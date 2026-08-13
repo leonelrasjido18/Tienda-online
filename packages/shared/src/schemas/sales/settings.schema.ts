@@ -21,6 +21,13 @@ export const publicStoreSettingsSchema = z.object({
   bankTransferInstructions: z.string().nullable(),
   /** Métodos realmente disponibles hoy: el storefront no debe ofrecer otros. */
   enabledPaymentMethods: z.array(z.string()),
+  // Datos de contacto públicos (se muestran en la página de contacto y el footer).
+  whatsappPhone: z.string().nullable(),
+  whatsappMessage: z.string().nullable(),
+  instagramUser: z.string().nullable(),
+  contactEmail: z.string().nullable(),
+  pickupAddress: z.string().nullable(),
+  openingHours: z.string().nullable(),
 });
 export type PublicStoreSettingsDto = z.infer<typeof publicStoreSettingsSchema>;
 

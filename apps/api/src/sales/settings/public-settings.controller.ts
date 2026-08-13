@@ -34,6 +34,12 @@ export class PublicSettingsController {
       defaultDepositPercent: settings.defaultDepositPercent,
       bankTransferInstructions: settings.bankTransferInstructions,
       enabledPaymentMethods: methods,
+      whatsappPhone: settings.whatsappPhone,
+      whatsappMessage: settings.whatsappMessage,
+      instagramUser: settings.instagramUser,
+      contactEmail: settings.contactEmail,
+      pickupAddress: settings.pickupAddress,
+      openingHours: settings.openingHours,
     };
   }
 }
