@@ -113,18 +113,49 @@ export class ProductsService {
     return this.toDetailDto(product);
   }
 
+  /** Convierte un nombre en un slug URL-friendly (sin acentos ni símbolos). */
+  private slugify(name: string): string {
+    const base = name
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80)
+      .replace(/-+$/g, '');
+    return base || 'producto';
+  }
+
+  /** Slug único: si ya existe, agrega -2, -3, … (excluyendo el propio producto). */
+  private async uniqueSlug(base: string, excludeId?: string): Promise<string> {
+    let slug = base;
+    let n = 2;
+    for (;;) {
+      const existing = await this.prisma.product.findFirst({
+        where: { slug, ...(excludeId ? { id: { not: excludeId } } : {}) },
+        select: { id: true },
+      });
+      if (!existing) return slug;
+      slug = `${base}-${n++}`;
+    }
+  }
+
   async create(input: UpsertProductInput): Promise<ProductDetailDto> {
+    // El slug sigue al nombre: se genera server-side y se ignora el que venga del form.
+    const slug = await this.uniqueSlug(this.slugify(input.name));
     const product = await this.prisma.product.create({
-      data: input,
+      data: { ...input, slug },
       include: PRODUCT_DETAIL_INCLUDE,
     });
     return this.toDetailDto(product);
   }
 
   async update(id: string, input: UpsertProductInput): Promise<ProductDetailDto> {
+    // Cada vez que cambia el nombre, el slug se regenera automáticamente.
+    const slug = await this.uniqueSlug(this.slugify(input.name), id);
     const product = await this.prisma.product.update({
       where: { id },
-      data: input,
+      data: { ...input, slug },
       include: PRODUCT_DETAIL_INCLUDE,
     });
     return this.toDetailDto(product);
