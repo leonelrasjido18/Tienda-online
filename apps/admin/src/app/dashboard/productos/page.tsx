@@ -44,11 +44,14 @@ export default function ProductsPage() {
   const api = useApi();
   const queryClient = useQueryClient();
   const [q, setQ] = useState('');
+  const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'products', q],
+    queryKey: ['admin', 'products', q, page],
     queryFn: () =>
-      api<AdminProductListResponse>(`/admin/products?${new URLSearchParams(q ? { q } : {}).toString()}`),
+      api<AdminProductListResponse>(
+        `/admin/products?${new URLSearchParams({ ...(q ? { q } : {}), page: String(page) }).toString()}`,
+      ),
   });
 
   const deleteMutation = useMutation({
@@ -70,7 +73,14 @@ export default function ProductsPage() {
       </div>
 
       <div className="mb-4 max-w-sm">
-        <Input placeholder="Buscar por nombre…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input
+          placeholder="Buscar por nombre…"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPage(1);
+          }}
+        />
       </div>
 
       <div className="rounded-lg border border-border bg-background">
@@ -176,6 +186,24 @@ export default function ProductsPage() {
           </TableBody>
         </Table>
       </div>
+
+      {data && (
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {data.total} producto(s){data.totalPages > 1 ? ` · Página ${data.page} de ${data.totalPages}` : ''}
+          </p>
+          {data.totalPages > 1 && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                Anterior
+              </Button>
+              <Button variant="outline" size="sm" disabled={page >= data.totalPages} onClick={() => setPage((p) => p + 1)}>
+                Siguiente
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
