@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { UploadsModule } from '../uploads/uploads.module';
 import { BrandsController } from './brands.controller';
 import { BrandsService } from './brands.service';
 import { CategoriesController } from './categories.controller';
@@ -14,6 +15,7 @@ import { TeamsController } from './teams.controller';
 import { TeamsService } from './teams.service';
 
 @Module({
+  imports: [UploadsModule],
   controllers: [
     LeaguesController,
     TeamsController,

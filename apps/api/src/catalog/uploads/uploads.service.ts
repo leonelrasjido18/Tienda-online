@@ -8,7 +8,7 @@ import sharp from 'sharp';
 const UPLOADS_ROOT = join(process.cwd(), 'uploads');
 const MAX_WIDTH = 1600;
 const MAX_INPUT_PIXELS = 40_000_000;
-const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']);
 const ALLOWED_FONT_EXTENSIONS = new Set(['.woff2', '.woff', '.ttf', '.otf']);
 
 function isValidFont(buffer: Buffer, extension: string): boolean {
@@ -44,9 +44,16 @@ export class UploadsService {
     await mkdir(targetDir, { recursive: true });
 
     const filename = `${randomUUID()}.webp`;
+    // El SVG se rasteriza a WebP (más seguro que servir SVG crudo, que puede traer
+    // scripts). Se usa una densidad alta para que el logo quede nítido.
+    const isSvg = file.mimetype === 'image/svg+xml';
 
     try {
-      await sharp(file.buffer, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'warning' })
+      await sharp(file.buffer, {
+        limitInputPixels: MAX_INPUT_PIXELS,
+        failOn: 'warning',
+        ...(isSvg ? { density: 384 } : {}),
+      })
       .rotate()
       .resize({ width: MAX_WIDTH, withoutEnlargement: true })
       .webp({ quality: 82 })

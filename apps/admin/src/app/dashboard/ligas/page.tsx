@@ -21,6 +21,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { ApiError } from '@/lib/api';
+import { resolveImageUrl } from '@/lib/media';
 import { useApi } from '@/lib/use-api';
 
 const emptyForm: UpsertLeagueInput = { name: '', slug: '', logoUrl: null, position: 0 };
@@ -39,6 +40,22 @@ export default function LeaguesPage() {
   const [form, setForm] = useState<UpsertLeagueInput>(emptyForm);
   const [slugTouched, setSlugTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  async function handleLogoUpload(file: File) {
+    setUploadingLogo(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const { url } = await api<{ url: string }>('/admin/leagues/logo', { method: 'POST', body: fd });
+      setForm((f) => ({ ...f, logoUrl: url }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo subir el logo');
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -174,12 +191,43 @@ export default function LeaguesPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="logoUrl">Logo (URL, opcional)</Label>
-              <Input
-                id="logoUrl"
-                value={form.logoUrl ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value || null }))}
-              />
+              <Label htmlFor="logoFile">Logo (opcional)</Label>
+              <div className="flex items-center gap-3">
+                {form.logoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={resolveImageUrl(form.logoUrl)}
+                    alt=""
+                    className="h-12 w-12 shrink-0 rounded border border-border bg-muted object-contain p-1"
+                  />
+                )}
+                <div className="flex-1 space-y-1">
+                  <Input
+                    id="logoFile"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    disabled={uploadingLogo}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleLogoUpload(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {uploadingLogo ? 'Subiendo…' : 'PNG, JPG o SVG (máx. 5 MB). Se guarda optimizado.'}
+                  </p>
+                </div>
+                {form.logoUrl && !uploadingLogo && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setForm((f) => ({ ...f, logoUrl: null }))}
+                  >
+                    Quitar
+                  </Button>
+                )}
+              </div>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
