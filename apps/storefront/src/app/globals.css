@@ -6,3 +6,15 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 }
+
+/* Carrusel de ligas: desplazamiento continuo, pausa al pasar el mouse. */
+@keyframes league-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.league-marquee {
+  animation: league-marquee 45s linear infinite;
+}
+.league-marquee:hover {
+  animation-play-state: paused;
+}

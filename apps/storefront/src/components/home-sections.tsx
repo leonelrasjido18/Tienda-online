@@ -6,6 +6,7 @@ import { buttonVariants, Card, CardContent } from '@tienda/ui';
 
 import { apiFetchSafe, getStoreSettings } from '@/lib/api-safe';
 import { ProductCard } from '@/components/product-card';
+import { LeagueCarousel } from '@/components/league-carousel';
 
 // --- 1. HERO SECTION ---
 export function HeroSection() {
@@ -151,34 +152,31 @@ export async function ProductRail({
 
 // --- 4. LEAGUE GRID (Server Async) ---
 export async function LeagueGrid() {
-  const facets = await apiFetchSafe<ProductFacetsDto>('/catalog/facets');
-  const leagues = facets?.leagues ?? [];
+  const [facets, leagues] = await Promise.all([
+    apiFetchSafe<ProductFacetsDto>('/catalog/facets'),
+    apiFetchSafe<{ slug: string; name: string; logoUrl: string | null }[]>('/catalog/leagues'),
+  ]);
 
-  if (leagues.length === 0) return null;
+  const facetLeagues = facets?.leagues ?? [];
+  if (facetLeagues.length === 0) return null;
+
+  // Se cruza el conteo (facetas) con el logo (catálogo de ligas) por slug.
+  const logoBySlug = new Map((leagues ?? []).map((l) => [l.slug, l.logoUrl]));
+  const items = facetLeagues.map((l) => ({
+    slug: l.value,
+    name: l.label,
+    count: l.count,
+    logoUrl: logoBySlug.get(l.value) ?? null,
+  }));
 
   return (
     <section className="bg-card py-12 border-y border-border">
       <div className="mx-auto max-w-[1600px] px-4">
         <h2 className="text-2xl font-bold tracking-tight text-foreground">Comprá por Liga</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Explorá nuestro catálogo de camisetas filtrado por las principales ligas del mundo.</p>
-
-        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          {leagues.map((league) => (
-            <Link
-              key={league.value}
-              href={`/productos?leagueSlug=${league.value}`}
-              className="group flex flex-col items-center justify-center rounded-xl border border-border bg-background p-4 text-center transition-all hover:border-accent hover:shadow-md"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted font-bold text-foreground group-hover:bg-accent group-hover:text-accent-foreground transition-colors">
-                {league.label.substring(0, 2).toUpperCase()}
-              </div>
-              <span className="mt-3 text-sm font-semibold text-foreground group-hover:text-accent">
-                {league.label}
-              </span>
-              <span className="mt-0.5 text-xs text-muted-foreground">{league.count} productos</span>
-            </Link>
-          ))}
-        </div>
+        <p className="mt-1 text-sm text-muted-foreground">Explorá el catálogo por las principales ligas del mundo.</p>
+      </div>
+      <div className="mt-6">
+        <LeagueCarousel items={items} />
       </div>
     </section>
   );
