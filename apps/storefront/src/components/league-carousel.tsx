@@ -25,13 +25,13 @@ export function LeagueCarousel({ items }: { items: LeagueCarouselItem[] }) {
             key={`${league.slug}-${i}`}
             href={`/productos?leagueSlug=${league.slug}`}
             aria-label={league.name}
-            className="flex w-36 shrink-0 flex-col items-center justify-center rounded-xl border border-border bg-background p-4 text-center transition-colors hover:border-accent"
+            className="flex w-44 shrink-0 flex-col items-center justify-center rounded-xl border border-border bg-background p-5 text-center transition-colors hover:border-accent"
           >
             {league.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={resolveImageUrl(league.logoUrl)} alt={league.name} className="h-14 w-14 object-contain" />
+              <img src={resolveImageUrl(league.logoUrl)} alt={league.name} className="h-24 w-24 object-contain" />
             ) : (
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-lg font-bold text-foreground">
+              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-muted text-2xl font-bold text-foreground">
                 {league.name.substring(0, 2).toUpperCase()}
               </div>
             )}
