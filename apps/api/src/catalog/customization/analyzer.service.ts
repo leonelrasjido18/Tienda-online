@@ -98,6 +98,7 @@ export class AnalyzerService {
       );
     }
 
+    const workspaceId = this.config.get('ANTHROPIC_WORKSPACE_ID');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let raw: string;
@@ -109,6 +110,7 @@ export class AnalyzerService {
           'x-api-key': apiKey,
           'anthropic-version': ANTHROPIC_VERSION,
           'content-type': 'application/json',
+          ...(workspaceId ? { 'anthropic-workspace-id': workspaceId } : {}),
         },
         body: JSON.stringify({
           model: this.config.get('ANTHROPIC_MODEL'),

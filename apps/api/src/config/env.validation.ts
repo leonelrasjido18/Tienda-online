@@ -54,6 +54,10 @@ export const envSchema = z.object({
   // /customization/analyze devuelve 400 con un mensaje claro y el resto funciona igual.
   ANTHROPIC_API_KEY: z.string().default(''),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-5'),
+  // Requerido solo si la API key está ligada a una identidad/espacio de trabajo
+  // (Anthropic pide el header anthropic-workspace-id en ese caso). El ID del
+  // workspace no es secreto: se ve en la consola de Claude.
+  ANTHROPIC_WORKSPACE_ID: z.string().default(''),
 
   CHECKOUT_RESERVATION_TTL_MINUTES: z.coerce.number().int().positive().default(20),
   BANK_TRANSFER_RESERVATION_TTL_HOURS: z.coerce.number().int().positive().default(48),
