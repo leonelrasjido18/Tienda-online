@@ -11,10 +11,14 @@ import {
 import { buttonVariants, Turnstile } from '@tienda/ui';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Landmark, CreditCard } from 'lucide-react';
 
 import { clientFetch } from '@/lib/client-api';
+import { trackEvent } from '@/lib/analytics';
+
+// Estados en los que ya entró dinero: se cuenta como conversión de compra.
+const PAID_STATES = ['DEPOSIT_PAID', 'AWAITING_BALANCE', 'PAID'];
 
 const ESTADO_LABELS: Record<string, string> = {
   aprobado: 'Pago aprobado',
@@ -28,6 +32,7 @@ export default function OrderConfirmationPage() {
   const estado = searchParams.get('estado');
   const [order, setOrder] = useState<PublicOrderDetailDto | null>(null);
   const [bankTransferInstructions, setBankTransferInstructions] = useState<string | null>(null);
+  const purchaseTracked = useRef(false);
 
   // States for retry payment
   const [enabledMethods, setEnabledMethods] = useState<CheckoutPaymentMethod[]>(['bank_transfer']);
@@ -68,6 +73,19 @@ export default function OrderConfirmationPage() {
           }
         })
         .catch(() => undefined);
+    }
+  }, [order]);
+
+  // Conversión de compra para GA4 (se dispara una sola vez, con dedup por número de pedido).
+  useEffect(() => {
+    if (!order || purchaseTracked.current) return;
+    if (PAID_STATES.includes(order.financialStatus)) {
+      purchaseTracked.current = true;
+      trackEvent('purchase', {
+        transaction_id: order.displayNumber,
+        value: order.totalCents / 100,
+        currency: 'ARS',
+      });
     }
   }, [order]);
 
