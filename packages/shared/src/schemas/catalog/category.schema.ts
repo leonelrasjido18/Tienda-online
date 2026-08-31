@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
-import { slugSchema } from './common.schema';
+import { imageUrlSchema, slugSchema } from './common.schema';
 
 export const upsertCategorySchema = z.object({
   name: z.string().min(1).max(120),
   slug: slugSchema,
   parentId: z.string().uuid().nullish(),
-  imageUrl: z.string().url().nullish(),
+  imageUrl: imageUrlSchema.nullish(),
   position: z.number().int().default(0),
 });
 

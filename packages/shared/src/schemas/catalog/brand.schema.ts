@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
-import { slugSchema } from './common.schema';
+import { imageUrlSchema, slugSchema } from './common.schema';
 
 export const upsertBrandSchema = z.object({
   name: z.string().min(1).max(120),
   slug: slugSchema,
-  logoUrl: z.string().url().nullish(),
+  logoUrl: imageUrlSchema.nullish(),
 });
 
 export type UpsertBrandInput = z.infer<typeof upsertBrandSchema>;

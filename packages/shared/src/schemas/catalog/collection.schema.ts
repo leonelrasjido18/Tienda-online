@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
-import { slugSchema } from './common.schema';
+import { imageUrlSchema, slugSchema } from './common.schema';
 
 export const upsertCollectionSchema = z.object({
   name: z.string().min(1).max(120),
   slug: slugSchema,
   description: z.string().max(500).nullish(),
-  imageUrl: z.string().url().nullish(),
+  imageUrl: imageUrlSchema.nullish(),
   position: z.number().int().min(0).optional(),
 });
 export type UpsertCollectionInput = z.infer<typeof upsertCollectionSchema>;

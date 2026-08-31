@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
-import { slugSchema } from './common.schema';
+import { imageUrlSchema, slugSchema } from './common.schema';
 
 export const upsertTeamSchema = z.object({
   name: z.string().min(1).max(120),
   slug: slugSchema,
   leagueId: z.string().uuid(),
-  crestUrl: z.string().url().nullish(),
+  crestUrl: imageUrlSchema.nullish(),
   position: z.number().int().default(0),
 });
 
