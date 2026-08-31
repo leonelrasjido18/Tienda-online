@@ -21,7 +21,12 @@ export default function Home() {
       {/* 2. Trust Bar */}
       <TrustBar />
 
-      {/* 3. Lo último que llegó (Latest products) */}
+      {/* 3. Comprá por liga (banner de ligas, clickeable) */}
+      <Suspense fallback={<div className="h-48 bg-card animate-pulse py-12" />}>
+        <LeagueGrid />
+      </Suspense>
+
+      {/* 4. Lo último que llegó (Latest products) */}
       <Suspense fallback={<ProductRailSkeleton title="Lo último que llegó" />}>
         <ProductRail
           title="Lo último que llegó"
@@ -29,11 +34,6 @@ export default function Home() {
           qs="sort=newest&perPage=8"
           viewAllHref="/productos"
         />
-      </Suspense>
-
-      {/* 4. Comprá por liga */}
-      <Suspense fallback={<div className="h-48 bg-card animate-pulse py-12" />}>
-        <LeagueGrid />
       </Suspense>
 
       {/* 5. Rails por liga configurados en site-config */}
