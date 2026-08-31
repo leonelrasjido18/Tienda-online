@@ -14,6 +14,7 @@ export * from './schemas/catalog/brand.schema';
 export * from './schemas/catalog/category.schema';
 export * from './schemas/catalog/collection.schema';
 export * from './schemas/catalog/product.schema';
+export * from './schemas/catalog/product-namer.schema';
 
 export * from './schemas/customization/print-area.schema';
 export * from './schemas/customization/font.schema';

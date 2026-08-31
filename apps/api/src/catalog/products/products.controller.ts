@@ -14,12 +14,14 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
+  aiNameProductSchema,
   bulkUpdateVariantsSchema,
   replaceProductOptionsSchema,
   reorderProductImagesSchema,
   updateProductImageSchema,
   upsertProductSchema,
   upsertVariantSchema,
+  type AiNameProductInput,
   type BulkUpdateVariantsInput,
   type ReplaceProductOptionsInput,
   type ReorderProductImagesInput,
@@ -31,6 +33,7 @@ import { z } from 'zod';
 
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { UploadsService } from '../uploads/uploads.service';
+import { ProductNamerService } from './product-namer.service';
 import { ProductsService } from './products.service';
 import { Roles } from '../../auth/decorators/roles.decorator';
 
@@ -47,6 +50,7 @@ export class ProductsController {
   constructor(
     private readonly products: ProductsService,
     private readonly uploads: UploadsService,
+    private readonly namer: ProductNamerService,
   ) {}
 
   @Get()
@@ -75,6 +79,13 @@ export class ProductsController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.products.remove(id);
+  }
+
+  /** Sugiere un nombre para el producto analizando su foto con IA (no lo guarda). */
+  @Post(':id/ai-name')
+  @UsePipes(new ZodValidationPipe(aiNameProductSchema))
+  aiName(@Param('id') id: string, @Body() body: AiNameProductInput) {
+    return this.namer.suggestName(id, body.imageId);
   }
 
   @Put(':id/options')

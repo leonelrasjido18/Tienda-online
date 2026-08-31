@@ -18,6 +18,7 @@ import {
   type CategoryDto,
   type LeagueDto,
   type ProductDetailDto,
+  type ProductNameSuggestion,
   type SeasonDto,
   type TeamDto,
   type UpsertProductInput,
@@ -68,6 +69,18 @@ export function ProductGeneralForm({ productId, product }: { productId: string; 
   const [form, setForm] = useState<UpsertProductInput>(toFormInput(product));
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<ProductNameSuggestion | null>(null);
+
+  const aiNameMutation = useMutation({
+    mutationFn: () =>
+      api<ProductNameSuggestion>(`/admin/products/${productId}/ai-name`, { method: 'POST', body: JSON.stringify({}) }),
+    onSuccess: (suggestion) => {
+      setAiSuggestion(suggestion);
+      setForm((f) => ({ ...f, name: suggestion.name }));
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'No se pudo sugerir un nombre'),
+  });
 
   const { data: leagues } = useQuery({ queryKey: ['admin', 'leagues'], queryFn: () => api<LeagueDto[]>('/admin/leagues') });
   const { data: teams } = useQuery({
@@ -102,8 +115,38 @@ export function ProductGeneralForm({ productId, product }: { productId: string; 
     >
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="name">Nombre</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="name">Nombre</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-auto px-2 py-0.5 text-xs text-accent"
+              disabled={aiNameMutation.isPending || product.images.length === 0}
+              onClick={() => aiNameMutation.mutate()}
+            >
+              {aiNameMutation.isPending ? 'Analizando…' : '✨ Sugerir con IA'}
+            </Button>
+          </div>
           <Input id="name" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+          {aiSuggestion && (
+            <p className="text-xs text-muted-foreground">
+              IA: <span className="font-medium text-foreground">{aiSuggestion.team || 'equipo no reconocido'}</span>
+              {' · confianza '}
+              <span
+                className={
+                  aiSuggestion.confidence === 'alta'
+                    ? 'text-emerald-600'
+                    : aiSuggestion.confidence === 'media'
+                      ? 'text-amber-600'
+                      : 'text-destructive'
+                }
+              >
+                {aiSuggestion.confidence}
+              </span>
+              {aiSuggestion.confidence !== 'alta' && ' — revisá el nombre antes de guardar'}
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="slug">Slug</Label>
