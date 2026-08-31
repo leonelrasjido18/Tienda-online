@@ -76,7 +76,7 @@ export function ProductGeneralForm({ productId, product }: { productId: string; 
       api<ProductNameSuggestion>(`/admin/products/${productId}/ai-name`, { method: 'POST', body: JSON.stringify({}) }),
     onSuccess: (suggestion) => {
       setAiSuggestion(suggestion);
-      setForm((f) => ({ ...f, name: suggestion.name }));
+      setForm((f) => ({ ...f, name: suggestion.name, description: suggestion.description }));
       setError(null);
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'No se pudo sugerir un nombre'),

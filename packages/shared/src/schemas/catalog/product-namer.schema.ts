@@ -30,5 +30,6 @@ export const productNameSuggestionSchema = z.object({
   season: z.string().max(20).nullable(),
   confidence: z.enum(['alta', 'media', 'baja']),
   name: z.string().min(3).max(140),
+  description: z.string().min(1).max(600),
 });
 export type ProductNameSuggestion = z.infer<typeof productNameSuggestionSchema>;

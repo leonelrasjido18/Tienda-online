@@ -166,6 +166,23 @@ export class ProductsService {
     return { success: true };
   }
 
+  /**
+   * Aplica contenido generado por IA (nombre y/o descripción). Si cambia el
+   * nombre, regenera el slug único. Usado por el proceso masivo de nombres.
+   */
+  async applyGeneratedContent(id: string, data: { name?: string; description?: string }) {
+    const patch: Prisma.ProductUpdateInput = {};
+    if (data.name) {
+      patch.name = data.name;
+      patch.slug = await this.uniqueSlug(this.slugify(data.name), id);
+    }
+    if (data.description !== undefined) {
+      patch.description = data.description;
+    }
+    if (Object.keys(patch).length === 0) return;
+    await this.prisma.product.update({ where: { id }, data: patch });
+  }
+
   async replaceOptions(id: string, input: ReplaceProductOptionsInput): Promise<ProductDetailDto> {
     if (input.options.length > MAX_PRODUCT_OPTIONS) {
       throw new BadRequestException(`Un producto admite hasta ${MAX_PRODUCT_OPTIONS} opciones`);

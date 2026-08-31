@@ -14,7 +14,7 @@ const ANTHROPIC_VERSION = '2023-06-01';
 const IMAGE_WIDTH = 768;
 const REQUEST_TIMEOUT_MS = 60_000;
 
-const SYSTEM_PROMPT = `Sos un experto en camisetas de fútbol. Mirás la foto de una camiseta y generás un NOMBRE de producto en español para una tienda argentina.
+const SYSTEM_PROMPT = `Sos un experto en camisetas de fútbol. Mirás la foto de una camiseta y generás un NOMBRE y una DESCRIPCIÓN de producto en español para una tienda argentina.
 
 Respondé ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni fences de markdown, con exactamente estas claves:
 - "team" (string): el club o selección de la camiseta (ej "Arsenal", "Boca Juniors", "Argentina"). Si no lo podés identificar con seguridad, poné "" (string vacío).
@@ -22,6 +22,7 @@ Respondé ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni fences 
 - "season" (string|null): temporada o año SOLO si es claramente visible o deducible (ej "2024/25", "2023"), o null si no se puede saber. NO inventes la temporada.
 - "confidence" (string): "alta" si estás seguro del equipo, "media" si es probable, "baja" si dudás.
 - "name" (string): el nombre final, con formato "Camiseta <Equipo> <Tipo> [<Temporada>]". Ejemplos: "Camiseta Arsenal Local 2024/25", "Camiseta Boca Juniors Visitante", "Camiseta Argentina Retro 1986". Si no identificás el equipo, describí lo visible, ej "Camiseta de fútbol roja y blanca".
+- "description" (string): 2 a 3 oraciones que describan la camiseta (colores y diseño), mencionen el EQUIPO y, si se sabe, la TEMPORADA. Tono comercial y natural para una ficha de producto. Ej: "Camiseta titular del Arsenal temporada 2024/25. Diseño en rojo con mangas blancas y detalles dorados. Ideal para hinchas que buscan el modelo actual del club." Si no conocés la temporada, no la menciones ni la inventes.
 
 Reglas:
 - Usá los colores dominantes, el escudo y el sponsor para identificar el equipo.
@@ -29,7 +30,8 @@ Reglas:
 - "local" es el color clásico del club; "visitante" el alternativo. Si no estás seguro del tipo, usá "otro".
 - El nombre SIEMPRE empieza con "Camiseta ".`;
 
-const USER_PROMPT = 'Nombrá esta camiseta y devolvé el JSON siguiendo exactamente el formato indicado.';
+const USER_PROMPT = 'Nombrá y describí esta camiseta, y devolvé el JSON siguiendo exactamente el formato indicado.';
+const MAX_TOKENS = 600;
 
 interface AnthropicTextBlock {
   type: string;
@@ -53,6 +55,40 @@ export class ProductNamerService {
     return this.config.get('ANTHROPIC_API_KEY') !== '';
   }
 
+  get model(): string {
+    return this.config.get('ANTHROPIC_MODEL');
+  }
+
+  /** Prepara la foto (achica + JPEG) y la devuelve en base64, lista para la API. */
+  async prepareImageBase64(imageUrl: string): Promise<string> {
+    const jpeg = await sharp(resolveUploadPath(imageUrl))
+      .resize({ width: IMAGE_WIDTH, withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    return jpeg.toString('base64');
+  }
+
+  /**
+   * Construye el cuerpo de UNA petición a la API de mensajes de Anthropic.
+   * Lo usan tanto la llamada individual como el batch, para que el prompt sea idéntico.
+   */
+  buildMessageBody(imageBase64: string): Record<string, unknown> {
+    return {
+      model: this.model,
+      max_tokens: MAX_TOKENS,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
+            { type: 'text', text: USER_PROMPT },
+          ],
+        },
+      ],
+    };
+  }
+
   /** Analiza una foto del producto y sugiere un nombre (no lo guarda). */
   async suggestName(productId: string, imageId?: string): Promise<ProductNameSuggestion> {
     const product = await this.prisma.product.findUnique({
@@ -67,12 +103,8 @@ export class ProductNamerService {
       throw new BadRequestException('El producto no tiene fotos para analizar');
     }
 
-    const jpeg = await sharp(resolveUploadPath(image.url))
-      .resize({ width: IMAGE_WIDTH, withoutEnlargement: true })
-      .jpeg({ quality: 85 })
-      .toBuffer();
-
-    return this.nameFromBuffer(jpeg);
+    const base64 = await this.prepareImageBase64(image.url);
+    return this.nameFromBuffer(Buffer.from(base64, 'base64'));
   }
 
   /** Núcleo reutilizable: recibe una imagen y devuelve la sugerencia de nombre. */
@@ -98,23 +130,7 @@ export class ProductNamerService {
           'content-type': 'application/json',
           ...(workspaceId ? { 'anthropic-workspace-id': workspaceId } : {}),
         },
-        body: JSON.stringify({
-          model: this.config.get('ANTHROPIC_MODEL'),
-          max_tokens: 512,
-          system: SYSTEM_PROMPT,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: { type: 'base64', media_type: 'image/jpeg', data: imageBuffer.toString('base64') },
-                },
-                { type: 'text', text: USER_PROMPT },
-              ],
-            },
-          ],
-        }),
+        body: JSON.stringify(this.buildMessageBody(imageBuffer.toString('base64'))),
       });
 
       const data = (await res.json()) as AnthropicResponse;
@@ -134,7 +150,7 @@ export class ProductNamerService {
   }
 
   /** Extrae y valida el JSON, tolerando fences y normalizando el nombre. */
-  private parseSuggestion(raw: string): ProductNameSuggestion {
+  parseSuggestion(raw: string): ProductNameSuggestion {
     const jsonText = raw.replace(/```json\s*|\s*```/g, '').trim();
     const start = jsonText.indexOf('{');
     const end = jsonText.lastIndexOf('}');
