@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Package,
   BarChart3,
+  Trophy,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useApi } from '@/lib/use-api';
@@ -33,6 +34,12 @@ interface DailyRevenue {
   revenueCents: number;
 }
 
+interface TopSeller {
+  productName: string;
+  quantity: number;
+  revenueCents: number;
+}
+
 interface DashboardStats {
   totalOrders: number;
   last30DaysOrders: number;
@@ -43,6 +50,7 @@ interface DashboardStats {
   lowStockVariants: LowStockVariant[];
   preorderDemand: PreorderDemand[];
   dailyRevenue: DailyRevenue[];
+  topSellers: TopSeller[];
 }
 
 export default function DashboardPage() {
@@ -191,6 +199,48 @@ export default function DashboardPage() {
             </p>
           )}
         </div>
+      </div>
+
+      {/* Más Vendidos */}
+      <div className="rounded-xl border border-border bg-background p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Trophy className="h-5 w-5 text-amber-500" />
+          <h2 className="font-bold text-foreground">Más Vendidos</h2>
+        </div>
+
+        {stats.topSellers.length > 0 ? (
+          <div className="space-y-2">
+            {stats.topSellers.map((item, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/20 p-3"
+              >
+                <div className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${
+                  i === 0
+                    ? 'bg-amber-500/20 text-amber-600'
+                    : i === 1
+                      ? 'bg-slate-400/20 text-slate-500'
+                      : i === 2
+                        ? 'bg-orange-700/20 text-orange-700'
+                        : 'bg-muted text-muted-foreground'
+                }`}>
+                  {i + 1}
+                </div>
+                <p className="flex-1 min-w-0 text-sm font-semibold text-foreground truncate">
+                  {item.productName}
+                </p>
+                <span className="text-xs font-bold text-primary">{item.quantity} uds.</span>
+                <span className="text-xs text-muted-foreground w-24 text-right">
+                  {formatCentsAsArs(item.revenueCents)}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground italic text-center py-8">
+            Todavía no hay ventas registradas.
+          </p>
+        )}
       </div>
 
       {/* Low Stock Alerts */}

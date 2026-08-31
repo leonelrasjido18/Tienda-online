@@ -22,6 +22,7 @@ export class DashboardController {
       lowStockVariants,
       preorderDemand,
       dailyRevenue,
+      topSellers,
     ] = await Promise.all([
       this.prisma.order.count(),
       this.prisma.order.count({
@@ -87,6 +88,14 @@ export class DashboardController {
         GROUP BY DATE(o."createdAt")
         ORDER BY date ASC
       ` as Promise<Array<{ date: string; orders: number; revenue_cents: bigint }>>,
+      // Más vendidos: por cantidad de unidades en pedidos pagados (o con seña).
+      this.prisma.orderItem.groupBy({
+        by: ['productName'],
+        _sum: { quantity: true, totalCents: true },
+        where: { order: { financialStatus: { in: ['PAID', 'DEPOSIT_PAID'] } } },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 10,
+      }),
     ]);
 
     const totalRevenueCents = revenueResult._sum.totalCents ?? 0;
@@ -114,6 +123,11 @@ export class DashboardController {
         date: r.date,
         orders: r.orders,
         revenueCents: Number(r.revenue_cents),
+      })),
+      topSellers: topSellers.map((t) => ({
+        productName: t.productName,
+        quantity: t._sum.quantity ?? 0,
+        revenueCents: t._sum.totalCents ?? 0,
       })),
     };
   }
