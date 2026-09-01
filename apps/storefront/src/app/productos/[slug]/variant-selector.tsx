@@ -97,9 +97,9 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-10 md:grid-cols-[minmax(0,440px)_minmax(0,1fr)] md:items-start">
       {/* Product Image Gallery */}
-      <div>
+      <div className="md:sticky md:top-6">
         <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-border bg-muted">
           {selectedImage ? (
             <Image
