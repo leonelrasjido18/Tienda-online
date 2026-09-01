@@ -49,7 +49,9 @@ export class DashboardController {
         where: {
           trackInventory: true,
           quantity: { lte: 3 },
-          variant: { product: { status: 'ACTIVE' } },
+          // Solo camisetas que se venden con stock en el local (no las de solo
+          // por encargo, que siempre están en 0 y no son una alerta real).
+          variant: { product: { status: 'ACTIVE', fulfillmentMode: { in: ['IN_STOCK', 'BOTH'] } } },
         },
         select: {
           quantity: true,
