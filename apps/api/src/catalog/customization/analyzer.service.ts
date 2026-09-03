@@ -29,8 +29,15 @@ Respondé ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni fences 
 - "strokeWidthPx" (integer 0-20): grosor aproximado del contorno en px (0 si no tiene).
 - "letterSpacingPx" (integer -10 a 50): separación entre letras aproximada (0 si es normal).
 - "fontStyle" (string): uno de "block" (bloque grueso moderno), "rounded" (redondeada), "condensed" (angosta/estirada), "serif" (con remates/clásica), "retro" (estilo años 70-90), "stencil" (tipo plantilla militar), "other".
-- "namePrintArea": objeto {"x","y","width","height","rotation","align"} con la ubicación del NOMBRE. x,y,width,height son fracciones 0-1 relativas al tamaño de la foto (x,y = esquina superior izquierda de la caja). "rotation" en grados (-45 a 45), "align" uno de "left","center","right". Si no hay nombre, estimá dónde iría (arriba del número).
-- "numberPrintArea": igual, para el DORSAL (el número grande y centrado).
+- "namePrintArea": objeto {"x","y","width","height","rotation","align"} con la ubicación del NOMBRE. x,y,width,height son fracciones 0-1 relativas al tamaño de la FOTO (x,y = esquina superior izquierda de la caja). "rotation" en grados (-45 a 45), "align" uno de "left","center","right". Si no hay nombre visible, estimá dónde iría.
+- "numberPrintArea": igual, para el DORSAL.
+
+CÓMO DIMENSIONAR LAS CAJAS (muy importante, no las hagas chicas):
+1. Primero identificá el área de la ESPALDA de la camiseta en la foto, ignorando el fondo, el maniquí y el perchero.
+2. El NOMBRE es una franja ANCHA justo debajo del cuello: ancho ≈ 55-70% del ancho de la espalda, alto ≈ 8-11% del alto de la espalda, centrada horizontalmente.
+3. El DORSAL es GRANDE y va centrado en el medio de la espalda, debajo del nombre: ancho ≈ 40-55% del ancho de la espalda, alto ≈ 28-38% del alto de la espalda.
+4. El DORSAL siempre es mucho más grande que el nombre: su alto debe ser al menos 3 veces el alto del nombre.
+5. Las cajas representan el tamaño REAL del estampado de una camiseta de fútbol profesional: si dudás, hacelas más grandes, no más chicas.
 - "notes" (string, máx 500): nota breve en español sobre lo que detectaste.
 
 Reglas: los colores SIEMPRE en hex #RRGGBB. Las coordenadas SIEMPRE fracciones entre 0 y 1. No inventes contorno si no lo ves.`;

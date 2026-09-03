@@ -32,11 +32,13 @@ import { useApi } from '@/lib/use-api';
 const PREVIEW_WIDTH = 480;
 const NONE = 'none';
 
+// Proporciones de una camiseta de fútbol real: el nombre es una franja ancha bajo
+// el cuello y el dorsal ocupa el centro de la espalda, bastante más grande.
 function defaultNameArea(): PrintArea {
-  return { x: 0.3, y: 0.2, width: 0.4, height: 0.08, rotation: 0, align: 'center' };
+  return { x: 0.27, y: 0.19, width: 0.46, height: 0.08, rotation: 0, align: 'center' };
 }
 function defaultNumberArea(): PrintArea {
-  return { x: 0.35, y: 0.3, width: 0.3, height: 0.16, rotation: 0, align: 'center' };
+  return { x: 0.3, y: 0.3, width: 0.4, height: 0.3, rotation: 0, align: 'center' };
 }
 function defaultPatchArea(): PrintArea {
   return { x: 0.08, y: 0.08, width: 0.16, height: 0.16, rotation: 0, align: 'center' };
@@ -222,16 +224,29 @@ export function ProductCustomizationEditor({
           )}
 
           <div className="mb-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => analyzeMutation.mutate()}
-              disabled={analyzeMutation.isPending || !customizationImageId}
-            >
-              {analyzeMutation.isPending ? 'Analizando…' : '✨ Analizar con IA'}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => analyzeMutation.mutate()}
+                disabled={analyzeMutation.isPending || !customizationImageId}
+              >
+                {analyzeMutation.isPending ? 'Analizando…' : '✨ Analizar con IA'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setNameArea(defaultNameArea());
+                  setNumberArea(defaultNumberArea());
+                }}
+              >
+                Usar medidas estándar
+              </Button>
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
               Detecta color, contorno y ubicación del nombre/dorsal desde la foto elegida y completa los campos.
+              “Medidas estándar” coloca el nombre y el dorsal con las proporciones de una camiseta real, sin usar IA.
             </p>
             {analysisNote && <p className="mt-1 text-xs text-emerald-600">IA: {analysisNote}</p>}
           </div>
