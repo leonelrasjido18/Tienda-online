@@ -59,10 +59,34 @@ function chunk<T>(arr: T[], size: number): T[][] {
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * fetch + JSON con reintentos. La API a veces contesta un texto plano
+ * ("credential validation failed") en vez de JSON; antes eso tiraba el proceso
+ * abajo y se perdía un batch ya pago.
+ */
+async function fetchJson<T>(url: string, init: RequestInit, retries = 6): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      const text = await res.text();
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        throw new Error(`respuesta no JSON (HTTP ${res.status}): ${text.slice(0, 120)}`);
+      }
+    } catch (e) {
+      if (attempt >= retries) throw e;
+      console.warn(`\n  reintento ${attempt}/${retries}: ${(e as Error).message}`);
+      await sleep(10_000);
+    }
+  }
+}
+
 async function main() {
   const apply = hasFlag('apply');
   const limitRaw = arg('limit');
   const limit = limitRaw ? Number(limitRaw) : undefined;
+  const resumeId = arg('batch-id');
 
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });
   const prisma = app.get(PrismaService);
@@ -101,43 +125,57 @@ async function main() {
     return;
   }
 
-  console.log('Preparando imágenes…');
   const requests: { custom_id: string; params: Record<string, unknown> }[] = [];
-  let prepared = 0;
-  for (const t of templates) {
-    const url = t.customizationImage?.url;
-    if (!url) continue;
-    try {
-      const base64 = await analyzer.prepareImageBase64(url);
-      requests.push({ custom_id: t.id, params: analyzer.buildMessageBody(base64) });
-    } catch (e) {
-      console.warn(`  ! Foto ilegible en ${t.product.name}: ${(e as Error).message}`);
+  if (!resumeId) {
+    console.log('Preparando imágenes…');
+    let prepared = 0;
+    for (const t of templates) {
+      const url = t.customizationImage?.url;
+      if (!url) continue;
+      try {
+        const base64 = await analyzer.prepareImageBase64(url);
+        requests.push({ custom_id: t.id, params: analyzer.buildMessageBody(base64) });
+      } catch (e) {
+        console.warn(`  ! Foto ilegible en ${t.product.name}: ${(e as Error).message}`);
+      }
+      if (++prepared % 100 === 0) console.log(`  … ${prepared}/${templates.length}`);
     }
-    if (++prepared % 100 === 0) console.log(`  … ${prepared}/${templates.length}`);
+    console.log(`Requests armadas: ${requests.length}`);
   }
-  console.log(`Requests armadas: ${requests.length}`);
 
   const analyses = new Map<string, CustomizationAnalysis>();
   const failed: { id: string; reason: string }[] = [];
   let totalIn = 0;
   let totalOut = 0;
 
-  const groups = chunk(requests, CHUNK_SIZE);
-  for (const [gi, group] of groups.entries()) {
-    console.log(`\nBatch ${gi + 1}/${groups.length} — enviando ${group.length}…`);
-    const created = (await (
-      await fetch(ANTHROPIC_BASE, { method: 'POST', headers, body: JSON.stringify({ requests: group }) })
-    ).json()) as BatchResource & { error?: { message?: string } };
-    if (!created.id) {
-      console.error('  Error creando el batch:', JSON.stringify(created).slice(0, 300));
-      continue;
+  // Con --batch-id se retoma un batch ya creado (no se vuelve a pagar).
+  const batchIds: string[] = [];
+  if (resumeId) {
+    batchIds.push(resumeId);
+    console.log(`Retomando batch existente: ${resumeId}`);
+  } else {
+    for (const [gi, group] of chunk(requests, CHUNK_SIZE).entries()) {
+      console.log(`\nEnviando batch ${gi + 1} (${group.length} pedidos)…`);
+      const created = await fetchJson<BatchResource & { error?: { message?: string } }>(ANTHROPIC_BASE, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ requests: group }),
+      });
+      if (!created.id) {
+        console.error('  Error creando el batch:', JSON.stringify(created).slice(0, 300));
+        continue;
+      }
+      console.log(`  Batch ${created.id} creado.`);
+      batchIds.push(created.id);
     }
-    console.log(`  Batch ${created.id}. Esperando…`);
+  }
 
-    let status = created;
+  for (const batchId of batchIds) {
+    console.log(`\nEsperando ${batchId}…`);
+    let status = await fetchJson<BatchResource>(`${ANTHROPIC_BASE}/${batchId}`, { headers });
     while (status.processing_status !== 'ended') {
       await sleep(POLL_INTERVAL_MS);
-      status = (await (await fetch(`${ANTHROPIC_BASE}/${created.id}`, { headers })).json()) as BatchResource;
+      status = await fetchJson<BatchResource>(`${ANTHROPIC_BASE}/${batchId}`, { headers });
       const c = status.request_counts ?? {};
       process.stdout.write(`\r  ${status.processing_status} (ok:${c.succeeded ?? 0} err:${c.errored ?? 0})   `);
     }
@@ -166,7 +204,12 @@ async function main() {
   // Aplicar SOLO color, contorno, interletrado y tipografía.
   const report: Record<string, unknown>[] = [];
   let applied = 0;
-  for (const t of templates) {
+  // Se resuelven por los IDs que devolvió el batch, así funciona igual al retomar.
+  const analyzed = await prisma.customizationTemplate.findMany({
+    where: { id: { in: [...analyses.keys()] } },
+    select: { id: true, product: { select: { name: true } } },
+  });
+  for (const t of analyzed) {
     const a = analyses.get(t.id);
     if (!a) continue;
     const fontId = await analyzer.matchFontStyle(a.fontStyle);
