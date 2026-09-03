@@ -32,12 +32,7 @@ Respondé ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni fences 
 - "namePrintArea": objeto {"x","y","width","height","rotation","align"} con la ubicación del NOMBRE. x,y,width,height son fracciones 0-1 relativas al tamaño de la FOTO (x,y = esquina superior izquierda de la caja). "rotation" en grados (-45 a 45), "align" uno de "left","center","right". Si no hay nombre visible, estimá dónde iría.
 - "numberPrintArea": igual, para el DORSAL.
 
-CÓMO DIMENSIONAR LAS CAJAS (muy importante, no las hagas chicas):
-1. Primero identificá el área de la ESPALDA de la camiseta en la foto, ignorando el fondo, el maniquí y el perchero.
-2. El NOMBRE es una franja ANCHA justo debajo del cuello: ancho ≈ 60-75% del ancho de la espalda, alto ≈ 9-12% del alto de la espalda, centrada horizontalmente.
-3. El DORSAL va centrado en el medio de la espalda, debajo del nombre: ancho ≈ 35-45% del ancho de la espalda, alto ≈ 22-28% del alto de la espalda.
-4. Proporción entre ambos: el alto del DORSAL debe ser aproximadamente 2 a 2,5 veces el alto del NOMBRE. Ni más ni menos.
-5. Las cajas representan el tamaño REAL del estampado de una camiseta de fútbol profesional.
+Nota: las zonas de impresión se definen aparte con medidas estándar, así que no te esfuerces en afinarlas; devolvé una estimación razonable y centrada. Lo importante de tu análisis es el COLOR, el CONTORNO y el ESTILO DE TIPOGRAFÍA.
 - "notes" (string, máx 500): nota breve en español sobre lo que detectaste.
 
 Reglas: los colores SIEMPRE en hex #RRGGBB. Las coordenadas SIEMPRE fracciones entre 0 y 1. No inventes contorno si no lo ves.`;

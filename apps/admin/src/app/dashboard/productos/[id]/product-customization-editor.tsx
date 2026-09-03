@@ -34,11 +34,13 @@ const NONE = 'none';
 
 // Proporciones de una camiseta de fútbol real: el nombre es una franja ancha bajo
 // el cuello y el dorsal ocupa el centro de la espalda, bastante más grande.
+// Posición estándar para las fotos de espalda lisa (maniquí centrado), ajustada a
+// mano sobre una camiseta real. Es la base para todo el catálogo.
 function defaultNameArea(): PrintArea {
-  return { x: 0.26, y: 0.19, width: 0.48, height: 0.09, rotation: 0, align: 'center' };
+  return { x: 0.266, y: 0.232, width: 0.467, height: 0.104, rotation: 0, align: 'center' };
 }
 function defaultNumberArea(): PrintArea {
-  return { x: 0.32, y: 0.3, width: 0.36, height: 0.22, rotation: 0, align: 'center' };
+  return { x: 0.308, y: 0.383, width: 0.4, height: 0.3, rotation: 0, align: 'center' };
 }
 function defaultPatchArea(): PrintArea {
   return { x: 0.08, y: 0.08, width: 0.16, height: 0.16, rotation: 0, align: 'center' };
@@ -151,8 +153,8 @@ export function ProductCustomizationEditor({
         setStrokeEnabled(false);
       }
       setLetterSpacingPx(res.letterSpacingPx);
-      setNameArea(res.namePrintArea);
-      setNumberArea(res.numberPrintArea);
+      // Las posiciones NO se tocan: se usan las medidas estándar, que son más
+      // confiables que la estimación de la IA sobre una espalda lisa.
       if (res.suggestedFontId) setFontId(res.suggestedFontId);
       setAnalysisNote(res.notes);
       setError(null);
@@ -245,8 +247,9 @@ export function ProductCustomizationEditor({
               </Button>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Detecta color, contorno y ubicación del nombre/dorsal desde la foto elegida y completa los campos.
-              “Medidas estándar” coloca el nombre y el dorsal con las proporciones de una camiseta real, sin usar IA.
+              La IA completa <strong>color, contorno y tipografía</strong> desde la foto elegida. Las posiciones no las
+              toca: se usan las medidas estándar. “Usar medidas estándar” vuelve a colocar el nombre y el dorsal en la
+              posición de referencia, sin costo.
             </p>
             {analysisNote && <p className="mt-1 text-xs text-emerald-600">IA: {analysisNote}</p>}
           </div>
