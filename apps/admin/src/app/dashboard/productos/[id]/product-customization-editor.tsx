@@ -81,7 +81,8 @@ export function ProductCustomizationEditor({
   const [strokeWidthPx, setStrokeWidthPx] = useState(c?.strokeWidthPx ?? 0);
   const [letterSpacingPx, setLetterSpacingPx] = useState(c?.letterSpacingPx ?? 0);
   const [customizationImageId, setCustomizationImageId] = useState<string | null>(
-    c?.customizationImageId ?? product.images[0]?.id ?? null,
+    // Por defecto la 2ª foto: es la espalda, que es donde va el estampado.
+    c?.customizationImageId ?? product.images[1]?.id ?? product.images[0]?.id ?? null,
   );
   const coverImage = product.images.find((img) => img.id === customizationImageId) ?? product.images[0];
   const [patchIds, setPatchIds] = useState<string[]>(c?.patches.map((p) => p.id) ?? []);

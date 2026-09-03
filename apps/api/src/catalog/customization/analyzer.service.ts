@@ -66,12 +66,16 @@ export class AnalyzerService {
   async analyzeProductImage(productId: string, imageId: string): Promise<CustomizationAnalysisResult> {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      include: { images: true },
+      include: { images: { orderBy: { position: 'asc' } } },
     });
     if (!product) {
       throw new NotFoundException('El producto no existe');
     }
-    const image = product.images.find((img) => img.id === imageId) ?? product.images[0];
+    // Sin imageId explícito se usa la 2ª foto (la espalda), que es donde va el estampado.
+    const image =
+      (imageId ? product.images.find((img) => img.id === imageId) : undefined) ??
+      product.images[1] ??
+      product.images[0];
     if (!image) {
       throw new BadRequestException('El producto no tiene fotos para analizar');
     }
@@ -85,6 +89,42 @@ export class AnalyzerService {
     const suggestedFontId = await this.matchFont(analysis.fontStyle);
 
     return { ...analysis, suggestedFontId };
+  }
+
+  get model(): string {
+    return this.config.get('ANTHROPIC_MODEL');
+  }
+
+  /** Prepara la foto para el análisis y la devuelve en base64 (usado por el batch). */
+  async prepareImageBase64(imageUrl: string): Promise<string> {
+    const jpeg = await sharp(resolveUploadPath(imageUrl))
+      .resize({ width: ANALYSIS_IMAGE_WIDTH, withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    return jpeg.toString('base64');
+  }
+
+  /** Cuerpo de UNA petición a la API de mensajes; idéntico prompt para vivo y batch. */
+  buildMessageBody(imageBase64: string): Record<string, unknown> {
+    return {
+      model: this.model,
+      max_tokens: 1024,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
+            { type: 'text', text: USER_PROMPT },
+          ],
+        },
+      ],
+    };
+  }
+
+  /** Mapea el estilo detectado a una fuente de la librería (público para el batch). */
+  matchFontStyle(fontStyle: CustomizationAnalysis['fontStyle']): Promise<string | null> {
+    return this.matchFont(fontStyle);
   }
 
   /**
@@ -150,7 +190,7 @@ export class AnalyzerService {
   }
 
   /** Extrae y valida el JSON, tolerando que el modelo lo envuelva en fences. */
-  private parseAnalysis(raw: string): CustomizationAnalysis {
+  parseAnalysis(raw: string): CustomizationAnalysis {
     const jsonText = raw.replace(/```json\s*|\s*```/g, '').trim();
     const start = jsonText.indexOf('{');
     const end = jsonText.lastIndexOf('}');
