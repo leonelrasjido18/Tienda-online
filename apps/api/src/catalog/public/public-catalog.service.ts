@@ -166,6 +166,7 @@ export class PublicCatalogService {
         alt: image.alt,
         position: image.position,
         optionValueId: image.optionValueId,
+        isLongSleeve: image.isLongSleeve,
       })),
       variants: product.variants.map((variant) => ({
         id: variant.id,

@@ -90,6 +90,7 @@ export const updateProductImageSchema = z.object({
   alt: z.string().max(200).nullish(),
   position: z.number().int().optional(),
   optionValueId: z.string().uuid().nullish(),
+  isLongSleeve: z.boolean().optional(),
 });
 
 export type UpdateProductImageInput = z.infer<typeof updateProductImageSchema>;
@@ -125,6 +126,7 @@ export const productImageSchema = z.object({
   alt: z.string().nullable(),
   position: z.number().int(),
   optionValueId: z.string().uuid().nullable(),
+  isLongSleeve: z.boolean(),
 });
 export type ProductImageDto = z.infer<typeof productImageSchema>;
 

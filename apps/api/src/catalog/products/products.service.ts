@@ -307,7 +307,7 @@ export class ProductsService {
   async updateImage(
     productId: string,
     imageId: string,
-    input: { alt?: string | null; optionValueId?: string | null },
+    input: { alt?: string | null; optionValueId?: string | null; isLongSleeve?: boolean },
   ) {
     await this.prisma.productImage.update({
       where: { id: imageId, productId },
@@ -376,6 +376,7 @@ export class ProductsService {
         alt: image.alt,
         position: image.position,
         optionValueId: image.optionValueId,
+        isLongSleeve: image.isLongSleeve,
       })),
       variants: product.variants.map((variant) => ({
         id: variant.id,

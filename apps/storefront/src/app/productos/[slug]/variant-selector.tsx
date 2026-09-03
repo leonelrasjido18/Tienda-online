@@ -65,6 +65,12 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
   const customizationImage =
     images.find((img) => img.id === product.customization?.customizationImageId) ?? images[0];
 
+  // Mangas largas: si el vendedor marcó una foto como manga larga, se muestra un
+  // toggle que cambia la imagen principal entre la corta (por defecto) y la larga.
+  const longSleeveImage = images.find((img) => img.isLongSleeve);
+  const shortSleeveImage = images.find((img) => !img.isLongSleeve) ?? images[0];
+  const isLongSleeveActive = !!longSleeveImage && selectedImage?.id === longSleeveImage.id;
+
   const totalCents = activeVariant ? activeVariant.priceCents + customizationValue.extraCents : undefined;
   const canBuy = !!activeVariant && activeVariant.inventory.available > 0 && customizationValue.valid;
   const canPreorder = !!activeVariant && activeVariant.inventory.allowPreorder && customizationValue.valid;
@@ -114,6 +120,31 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Sin foto disponible</div>
           )}
         </div>
+
+        {longSleeveImage && (
+          <div className="mt-4 inline-flex rounded-lg border border-border p-1">
+            <button
+              type="button"
+              onClick={() => setActiveImageId(shortSleeveImage?.id ?? null)}
+              className={
+                'rounded-md px-4 py-1.5 text-sm font-semibold transition-colors ' +
+                (!isLongSleeveActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground')
+              }
+            >
+              Manga corta
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveImageId(longSleeveImage.id)}
+              className={
+                'rounded-md px-4 py-1.5 text-sm font-semibold transition-colors ' +
+                (isLongSleeveActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground')
+              }
+            >
+              Mangas largas
+            </button>
+          </div>
+        )}
 
         {images.length > 1 && (
           <div className="mt-4 flex gap-3 overflow-x-auto pb-2">

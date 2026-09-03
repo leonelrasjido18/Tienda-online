@@ -44,10 +44,10 @@ export function ProductImagesManager({
   });
 
   const updateImageMutation = useMutation({
-    mutationFn: ({ imageId, optionValueId }: { imageId: string; optionValueId: string | null }) =>
+    mutationFn: ({ imageId, patch }: { imageId: string; patch: Record<string, unknown> }) =>
       api(`/admin/products/${productId}/images/${imageId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ optionValueId }),
+        body: JSON.stringify(patch),
       }),
     onSuccess: invalidate,
   });
@@ -106,7 +106,10 @@ export function ProductImagesManager({
                 <Select
                   value={image.optionValueId ?? NONE}
                   onValueChange={(value) =>
-                    updateImageMutation.mutate({ imageId: image.id, optionValueId: value === NONE ? null : value })
+                    updateImageMutation.mutate({
+                      imageId: image.id,
+                      patch: { optionValueId: value === NONE ? null : value },
+                    })
                   }
                 >
                   <SelectTrigger className="h-8 text-xs">
@@ -122,6 +125,18 @@ export function ProductImagesManager({
                   </SelectContent>
                 </Select>
               )}
+
+              <Button
+                type="button"
+                variant={image.isLongSleeve ? 'default' : 'outline'}
+                size="sm"
+                className="w-full text-xs"
+                onClick={() =>
+                  updateImageMutation.mutate({ imageId: image.id, patch: { isLongSleeve: !image.isLongSleeve } })
+                }
+              >
+                {image.isLongSleeve ? '✓ Mangas largas' : 'Marcar mangas largas'}
+              </Button>
 
               <div className="flex items-center justify-between">
                 <div className="flex gap-1">
