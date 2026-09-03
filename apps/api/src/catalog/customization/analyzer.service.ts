@@ -34,10 +34,10 @@ Respondé ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni fences 
 
 CÓMO DIMENSIONAR LAS CAJAS (muy importante, no las hagas chicas):
 1. Primero identificá el área de la ESPALDA de la camiseta en la foto, ignorando el fondo, el maniquí y el perchero.
-2. El NOMBRE es una franja ANCHA justo debajo del cuello: ancho ≈ 55-70% del ancho de la espalda, alto ≈ 8-11% del alto de la espalda, centrada horizontalmente.
-3. El DORSAL es GRANDE y va centrado en el medio de la espalda, debajo del nombre: ancho ≈ 40-55% del ancho de la espalda, alto ≈ 28-38% del alto de la espalda.
-4. El DORSAL siempre es mucho más grande que el nombre: su alto debe ser al menos 3 veces el alto del nombre.
-5. Las cajas representan el tamaño REAL del estampado de una camiseta de fútbol profesional: si dudás, hacelas más grandes, no más chicas.
+2. El NOMBRE es una franja ANCHA justo debajo del cuello: ancho ≈ 60-75% del ancho de la espalda, alto ≈ 9-12% del alto de la espalda, centrada horizontalmente.
+3. El DORSAL va centrado en el medio de la espalda, debajo del nombre: ancho ≈ 35-45% del ancho de la espalda, alto ≈ 22-28% del alto de la espalda.
+4. Proporción entre ambos: el alto del DORSAL debe ser aproximadamente 2 a 2,5 veces el alto del NOMBRE. Ni más ni menos.
+5. Las cajas representan el tamaño REAL del estampado de una camiseta de fútbol profesional.
 - "notes" (string, máx 500): nota breve en español sobre lo que detectaste.
 
 Reglas: los colores SIEMPRE en hex #RRGGBB. Las coordenadas SIEMPRE fracciones entre 0 y 1. No inventes contorno si no lo ves.`;

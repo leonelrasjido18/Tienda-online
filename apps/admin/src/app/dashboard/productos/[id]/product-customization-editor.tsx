@@ -35,10 +35,10 @@ const NONE = 'none';
 // Proporciones de una camiseta de fútbol real: el nombre es una franja ancha bajo
 // el cuello y el dorsal ocupa el centro de la espalda, bastante más grande.
 function defaultNameArea(): PrintArea {
-  return { x: 0.27, y: 0.19, width: 0.46, height: 0.08, rotation: 0, align: 'center' };
+  return { x: 0.26, y: 0.19, width: 0.48, height: 0.09, rotation: 0, align: 'center' };
 }
 function defaultNumberArea(): PrintArea {
-  return { x: 0.3, y: 0.3, width: 0.4, height: 0.3, rotation: 0, align: 'center' };
+  return { x: 0.32, y: 0.3, width: 0.36, height: 0.22, rotation: 0, align: 'center' };
 }
 function defaultPatchArea(): PrintArea {
   return { x: 0.08, y: 0.08, width: 0.16, height: 0.16, rotation: 0, align: 'center' };
