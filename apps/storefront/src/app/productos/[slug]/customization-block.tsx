@@ -10,6 +10,8 @@ import {
 import { Input, Label } from '@tienda/ui';
 import { useEffect, useMemo, useState } from 'react';
 
+import { resolveImageUrl } from '@/lib/media';
+
 const CANVAS_WIDTH = 1200;
 
 export interface CustomizationValue {
@@ -84,7 +86,7 @@ export function CustomizationBlock({
   return (
     <div className="mt-8 space-y-4 border-t border-border pt-6">
       {customization.font && (
-        <style>{`@font-face { font-family: '${fontFamily}'; src: url('${customization.font.fontFileUrl}'); }`}</style>
+        <style>{`@font-face { font-family: '${fontFamily}'; src: url('${resolveImageUrl(customization.font.fontFileUrl)}'); }`}</style>
       )}
 
       <h2 className="text-sm font-semibold">Personalizá tu camiseta</h2>
