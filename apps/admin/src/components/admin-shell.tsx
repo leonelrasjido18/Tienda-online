@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@tienda/ui';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
@@ -94,17 +94,47 @@ function NavGroupSection({ group, pathname }: { group: NavGroup; pathname: strin
 export function AdminShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  // En móvil la barra lateral se oculta y se abre como panel deslizante.
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     // Altura fija de pantalla + overflow oculto: la barra lateral queda fija y sólo
     // el contenido principal hace scroll. Así el pie (email, notificaciones, salir)
     // está siempre visible, haya o no scroll.
     <div className="flex h-screen overflow-hidden">
-      <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-border bg-background">
-        <div className="border-b border-border px-4 py-4">
+      {menuOpen && (
+        <button
+          type="button"
+          aria-label="Cerrar menú"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
+      <aside
+        className={
+          'fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col border-r border-border bg-background transition-transform duration-200 md:static md:z-auto md:w-56 md:translate-x-0 ' +
+          (menuOpen ? 'translate-x-0' : '-translate-x-full')
+        }
+      >
+        <div className="flex items-center justify-between border-b border-border px-4 py-4">
           <p className="text-sm font-semibold">Panel de la tienda</p>
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
+            onClick={() => setMenuOpen(false)}
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
-        <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
+        <nav
+          className="flex-1 space-y-0.5 overflow-y-auto p-2"
+          // Al tocar un link se cierra el menú (en escritorio no molesta porque está fijo).
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('a')) setMenuOpen(false);
+          }}
+        >
           {NAV.map((entry) => {
             if (isGroup(entry)) {
               return <NavGroupSection key={entry.label} group={entry} pathname={pathname} />;
@@ -125,7 +155,21 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </Button>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto bg-muted/30 p-6">{children}</main>
+
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex items-center gap-3 border-b border-border bg-background px-4 py-3 md:hidden">
+          <button
+            type="button"
+            aria-label="Abrir menú"
+            className="rounded-md p-1.5 text-foreground hover:bg-accent"
+            onClick={() => setMenuOpen(true)}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <p className="text-sm font-semibold">Panel de la tienda</p>
+        </header>
+        <main className="flex-1 overflow-y-auto bg-muted/30 p-4 md:p-6">{children}</main>
+      </div>
     </div>
   );
 }
