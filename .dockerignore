@@ -11,3 +11,5 @@
 apps/api/uploads
 **/*.log
 docker/data
+# Los backups viven en /var/backups/tienda; esto es por si quedan copias viejas.
+backups

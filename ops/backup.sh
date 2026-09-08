@@ -3,7 +3,9 @@
 # Pensado para correr por cron como root en el VPS. Instalado en /opt/tienda/ops/.
 set -eu
 
-BACKUP_DIR=/opt/tienda/backups
+# Fuera de /opt/tienda a propósito: esa carpeta es el contexto de build de Docker
+# y los backups se copiarían en cada build (llenaron el disco una vez).
+BACKUP_DIR=/var/backups/tienda
 DB_DIR="$BACKUP_DIR/db"
 UP_DIR="$BACKUP_DIR/uploads"
 LOG="$BACKUP_DIR/backup.log"
@@ -12,7 +14,8 @@ UPLOADS_PATH=/var/lib/docker/volumes/tienda-online-prod_uploads_data/_data
 
 # Cuántas copias conservar.
 KEEP_DB=14
-KEEP_UPLOADS=7
+# Cada copia de imágenes pesa cientos de MB y cambian poco: con 3 alcanza.
+KEEP_UPLOADS=3
 
 STAMP=$(date +%Y%m%d_%H%M)
 mkdir -p "$DB_DIR" "$UP_DIR"

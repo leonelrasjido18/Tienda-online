@@ -6,9 +6,9 @@ Scripts que corren en el VPS (`/opt/tienda/ops/`).
 
 `backup.sh` hace, cada día por cron (03:30):
 
-- **Base de datos**: `pg_dump -Fc` → `/opt/tienda/backups/db/db_<fecha>.dump` (se conservan 14).
-- **Imágenes**: `tar.gz` del volumen de uploads → `/opt/tienda/backups/uploads/uploads_<fecha>.tar.gz` (se conservan 7).
-- Log en `/opt/tienda/backups/backup.log`.
+- **Base de datos**: `pg_dump -Fc` → `/var/backups/tienda/db/db_<fecha>.dump` (se conservan 14).
+- **Imágenes**: `tar.gz` del volumen de uploads → `/var/backups/tienda/uploads/uploads_<fecha>.tar.gz` (se conservan 3).
+- Log en `/var/backups/tienda/backup.log`.
 
 Los backups son **locales** al VPS y con permisos `700/600` (solo root). Para
 protegerse de una caída total del VPS conviene sumar copia **fuera del servidor**
@@ -22,14 +22,14 @@ protegerse de una caída total del VPS conviene sumar copia **fuera del servidor
 ### Restaurar (probar el backup)
 ```sh
 # A una base de prueba (NO toca producción):
-/opt/tienda/ops/restore-db.sh /opt/tienda/backups/db/db_XXXX.dump
+/opt/tienda/ops/restore-db.sh /var/backups/tienda/db/db_XXXX.dump
 
 # Sobre la base de producción (la recrea desde cero): pasar el nombre real:
-/opt/tienda/ops/restore-db.sh /opt/tienda/backups/db/db_XXXX.dump <POSTGRES_DB>
+/opt/tienda/ops/restore-db.sh /var/backups/tienda/db/db_XXXX.dump <POSTGRES_DB>
 ```
 
 ### Restaurar imágenes
 ```sh
-tar xzf /opt/tienda/backups/uploads/uploads_XXXX.tar.gz \
+tar xzf /var/backups/tienda/uploads/uploads_XXXX.tar.gz \
   -C /var/lib/docker/volumes/tienda-online-prod_uploads_data/_data
 ```
