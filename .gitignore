@@ -42,3 +42,24 @@ apps/api/uploads/
 
 # Salida de scans de Strix (pentesting) — no versionar
 strix_runs/
+
+# --- Herramientas locales (no son parte de la app) ---
+
+# Importador de catálogo: scripts de Python más su material de trabajo. Lo
+# pesado es el material — batch/pedidos.jsonl son 570 MB de fotos ya
+# preparadas, y las láminas de contacto se regeneran solas desde Drive.
+# Ojo: estado.json y stock_estado.json son el registro de qué carpeta ya se
+# publicó. No se versionan, pero conviene respaldarlos aparte: son la única
+# protección real contra cargar dos veces el mismo producto.
+importador/
+
+# Entorno virtual de Python. Estaba versionado: 1896 archivos.
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Perfil de navegador de Playwright. Estaba versionado: 1586 archivos, e
+# incluía "Login Data", "Cookies", "Web Data" e "History" — o sea contraseñas
+# guardadas, cookies de sesión y autocompletado.
+playwright_profile/

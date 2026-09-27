@@ -13,3 +13,19 @@ apps/api/uploads
 docker/data
 # Los backups viven en /var/backups/tienda; esto es por si quedan copias viejas.
 backups
+
+# Herramientas locales que no forman parte de la app desplegada. Sin esto el
+# contexto de build llegaba a 1,83 GB y tardaba ~3 min solo en transferirse:
+# el importador guarda las fotos ya preparadas (batch/pedidos.jsonl pesa 570 MB)
+# y las laminas de contacto.
+importador
+venv
+.venv
+**/__pycache__
+**/*.pyc
+requiriments.txt
+productos.py
+
+# Perfil de navegador de pruebas: son ~1500 archivos y traen cookies e
+# historial. No tiene nada que hacer dentro de una imagen de produccion.
+playwright_profile
