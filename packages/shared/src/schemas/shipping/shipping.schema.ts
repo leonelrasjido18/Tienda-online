@@ -27,6 +27,25 @@ export const shippingRateSchema = z.object({
 });
 export type ShippingRateDto = z.infer<typeof shippingRateSchema>;
 
+/**
+ * Lo que realmente se cobro de envio por provincia, sacado de los pedidos ya
+ * despachados. Sirve para construir la tabla de tarifas con precios propios en
+ * vez de adivinar: cada envio cotizado a mano en el sitio del correo queda como
+ * observacion.
+ */
+export const observedShippingRateSchema = z.object({
+  province: z.string(),
+  /** Cantidad de envios que respaldan el promedio. */
+  samples: z.number().int(),
+  avgCents: z.number().int(),
+  minCents: z.number().int(),
+  maxCents: z.number().int(),
+  /** Prendas promedio por pedido: el precio del correo sube con el peso. */
+  avgItems: z.number(),
+  lastAt: z.string(),
+});
+export type ObservedShippingRateDto = z.infer<typeof observedShippingRateSchema>;
+
 /** Cuerpo de la cotización en vivo del checkout: el CP de destino (y provincia). */
 export const publicShippingQuoteSchema = z.object({
   postalCode: z.string().trim().min(4).max(8),

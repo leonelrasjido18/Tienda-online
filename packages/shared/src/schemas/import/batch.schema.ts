@@ -120,6 +120,10 @@ export const importBatchOrderSchema = z.object({
   province: z.string().nullable(),
   pickupInStore: z.boolean(),
   itemCount: z.number().int(),
+  /** Dirección lista para pegar en el sitio de Correo al cotizar el envío. */
+  shippingAddress: z.string().nullable(),
+  postalCode: z.string().nullable(),
+  contactPhone: z.string().nullable(),
 });
 export type ImportBatchOrderDto = z.infer<typeof importBatchOrderSchema>;
 

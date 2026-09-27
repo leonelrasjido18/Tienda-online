@@ -194,6 +194,15 @@ export type ProductListItemDto = z.infer<typeof productListItemSchema>;
 export const PRODUCT_SORT_OPTIONS = ['relevance', 'price_asc', 'price_desc', 'newest'] as const;
 export type ProductSort = (typeof PRODUCT_SORT_OPTIONS)[number];
 
+/** Apartados del catalogo por disponibilidad. */
+export const PRODUCT_AVAILABILITY = ['stock', 'encargo'] as const;
+export type ProductAvailability = (typeof PRODUCT_AVAILABILITY)[number];
+
+export const PRODUCT_AVAILABILITY_LABELS: Record<ProductAvailability, string> = {
+  stock: 'Stock inmediato',
+  encargo: 'Por encargo',
+};
+
 export const productListQuerySchema = paginationQuerySchema.extend({
   q: z.string().trim().min(1).max(100).optional(),
   leagueSlug: z.string().optional(),
@@ -204,6 +213,12 @@ export const productListQuerySchema = paginationQuerySchema.extend({
   minPrice: z.coerce.number().int().nonnegative().optional(),
   maxPrice: z.coerce.number().int().nonnegative().optional(),
   sort: z.enum(PRODUCT_SORT_OPTIONS).default('newest'),
+  /**
+   * Disponibilidad. Se mide contra el stock REAL, no contra fulfillmentMode:
+   * un producto marcado "en stock" pero con 0 unidades no se puede entregar ya,
+   * y aparecer en ese apartado seria mentirle al cliente.
+   */
+  disponibilidad: z.enum(PRODUCT_AVAILABILITY).optional(),
 });
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
 

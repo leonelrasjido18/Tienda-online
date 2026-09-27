@@ -68,7 +68,8 @@ export default function BatchDetailPage() {
       setError(null);
       refresh(updated);
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'No se pudo avanzar el lote'),
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : 'No se pudo avanzar el lote'),
   });
 
   const assignMutation = useMutation({
@@ -86,8 +87,30 @@ export default function BatchDetailPage() {
 
   const removeOrderMutation = useMutation({
     mutationFn: (orderId: string) =>
-      api<ImportBatchDetailDto>(`/admin/batches/${params.id}/orders/${orderId}`, { method: 'DELETE' }),
+      api<ImportBatchDetailDto>(`/admin/batches/${params.id}/orders/${orderId}`, {
+        method: 'DELETE',
+      }),
     onSuccess: refresh,
+  });
+
+  // Monto de envio que la duena tipea por pedido, en pesos. Se guarda por id
+  // porque la tabla muestra todos los pedidos del lote a la vez.
+  const [envioPesos, setEnvioPesos] = useState<Record<string, string>>({});
+  const [envioError, setEnvioError] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState<string | null>(null);
+
+  const sendBalanceMutation = useMutation({
+    mutationFn: ({ orderId, shippingCents }: { orderId: string; shippingCents: number }) =>
+      api(`/admin/batches/orders/${orderId}/send-balance`, {
+        method: 'POST',
+        body: JSON.stringify({ shippingCents }),
+      }),
+    onSuccess: () => {
+      setEnvioError(null);
+      void queryClient.invalidateQueries({ queryKey: batchKey });
+    },
+    onError: (err) =>
+      setEnvioError(err instanceof Error ? err.message : 'No se pudo enviar el link'),
   });
 
   const markPaidMutation = useMutation({
@@ -139,12 +162,14 @@ export default function BatchDetailPage() {
             ))}
           </div>
         )}
-        {batch.status !== 'RECEIVED' && batch.status !== 'CLOSED' && nextStates.includes('RECEIVED') && (
-          <p className="mt-3 text-xs text-amber-600">
-            Al marcar &ldquo;Recibido&rdquo; se cotiza el envío de cada pedido, se generan los links de cobro y se
-            manda el email a cada cliente. No se puede deshacer.
-          </p>
-        )}
+        {batch.status !== 'RECEIVED' &&
+          batch.status !== 'CLOSED' &&
+          nextStates.includes('RECEIVED') && (
+            <p className="mt-3 text-xs text-amber-600">
+              Al marcar &ldquo;Recibido&rdquo; se cotiza el envío de cada pedido, se generan los
+              links de cobro y se manda el email a cada cliente. No se puede deshacer.
+            </p>
+          )}
         {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
       </section>
 
@@ -157,6 +182,7 @@ export default function BatchDetailPage() {
             </Button>
           )}
         </div>
+        {envioError && <p className="mb-3 text-sm text-destructive">{envioError}</p>}
         <Table>
           <TableHeader>
             <TableRow>
@@ -180,7 +206,10 @@ export default function BatchDetailPage() {
             {batch.orders.map((order) => (
               <TableRow key={order.id}>
                 <TableCell>
-                  <Link href={`/dashboard/pedidos/${order.id}`} className="font-medium hover:underline">
+                  <Link
+                    href={`/dashboard/pedidos/${order.id}`}
+                    className="font-medium hover:underline"
+                  >
                     {order.displayNumber}
                   </Link>
                 </TableCell>
@@ -189,13 +218,57 @@ export default function BatchDetailPage() {
                   <div className="text-xs text-muted-foreground">{order.contactEmail}</div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {order.pickupInStore ? 'Retira en local' : (order.province ?? '—')}
+                  {order.pickupInStore ? (
+                    'Retira en local'
+                  ) : order.shippingAddress ? (
+                    <div className="max-w-[22rem]">
+                      <div className="text-xs leading-snug text-foreground">
+                        {order.shippingAddress}
+                      </div>
+                      {order.contactPhone && (
+                        <div className="text-xs text-muted-foreground">
+                          Tel: {order.contactPhone}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        className="mt-1 text-xs font-medium text-accent hover:underline"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(order.shippingAddress ?? '');
+                          setCopiado(order.id);
+                          setTimeout(() => setCopiado(null), 1500);
+                        }}
+                      >
+                        {copiado === order.id ? '✓ Copiada' : 'Copiar dirección'}
+                      </button>
+                    </div>
+                  ) : (
+                    (order.province ?? '—')
+                  )}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {order.balanceCents !== null ? formatCentsAsArs(order.balanceCents) : '—'}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {order.shippingCents !== null ? formatCentsAsArs(order.shippingCents) : 'A cotizar'}
+                  {order.shippingCents !== null ? (
+                    formatCentsAsArs(order.shippingCents)
+                  ) : order.pickupInStore ? (
+                    'Retira en local'
+                  ) : batch.status === 'RECEIVED' && order.financialStatus === 'DEPOSIT_PAID' ? (
+                    <Input
+                      type="number"
+                      min={0}
+                      step={100}
+                      placeholder="$ envio"
+                      className="h-8 w-28"
+                      value={envioPesos[order.id] ?? ''}
+                      onChange={(e) =>
+                        setEnvioPesos((prev) => ({ ...prev, [order.id]: e.target.value }))
+                      }
+                    />
+                  ) : (
+                    'A cotizar'
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge variant={order.financialStatus === 'PAID' ? 'default' : 'outline'}>
@@ -215,6 +288,34 @@ export default function BatchDetailPage() {
                       onClick={() => removeOrderMutation.mutate(order.id)}
                     >
                       Quitar
+                    </Button>
+                  ) : batch.status === 'RECEIVED' && order.financialStatus === 'DEPOSIT_PAID' ? (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled={sendBalanceMutation.isPending}
+                      onClick={() => {
+                        const pesos = order.pickupInStore ? 0 : Number(envioPesos[order.id]);
+                        if (!order.pickupInStore && !Number.isFinite(pesos)) {
+                          setEnvioError('Cargá el costo de envío antes de enviar el link');
+                          return;
+                        }
+                        const total = (order.balanceCents ?? 0) + Math.round(pesos * 100);
+                        if (
+                          confirm(
+                            `Se le va a cobrar ${formatCentsAsArs(total)} a ${order.contactName} ` +
+                              `(saldo + ${formatCentsAsArs(Math.round(pesos * 100))} de envío). ` +
+                              'Se le manda el mail con el link. ¿Confirmás?',
+                          )
+                        ) {
+                          sendBalanceMutation.mutate({
+                            orderId: order.id,
+                            shippingCents: Math.round(pesos * 100),
+                          });
+                        }
+                      }}
+                    >
+                      Enviar link
                     </Button>
                   ) : order.financialStatus === 'AWAITING_BALANCE' ? (
                     <Button
@@ -263,19 +364,26 @@ export default function BatchDetailPage() {
               </p>
             )}
             {assignable?.map((order) => (
-              <label key={order.id} className="flex items-center justify-between gap-3 rounded-md border border-border p-2 text-sm">
+              <label
+                key={order.id}
+                className="flex items-center justify-between gap-3 rounded-md border border-border p-2 text-sm"
+              >
                 <span className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={selected.includes(order.id)}
                     onChange={(e) =>
-                      setSelected((ids) => (e.target.checked ? [...ids, order.id] : ids.filter((i) => i !== order.id)))
+                      setSelected((ids) =>
+                        e.target.checked ? [...ids, order.id] : ids.filter((i) => i !== order.id),
+                      )
                     }
                   />
                   <span>
                     <span className="font-medium">{order.displayNumber}</span> · {order.contactName}
                     <span className="block text-xs text-muted-foreground">
-                      {order.pickupInStore ? 'Retira en local' : (order.province ?? 'Sin provincia')}
+                      {order.pickupInStore
+                        ? 'Retira en local'
+                        : (order.province ?? 'Sin provincia')}
                     </span>
                   </span>
                 </span>
@@ -307,7 +415,13 @@ function toLocalInput(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function PreorderWindowSection({ batch, batchId }: { batch: ImportBatchDetailDto; batchId: string }) {
+function PreorderWindowSection({
+  batch,
+  batchId,
+}: {
+  batch: ImportBatchDetailDto;
+  batchId: string;
+}) {
   const api = useApi();
   const queryClient = useQueryClient();
   const batchKey = ['admin', 'batches', batchId];
@@ -330,7 +444,8 @@ function PreorderWindowSection({ batch, batchId }: { batch: ImportBatchDetailDto
         body: JSON.stringify({ isActive }),
       }),
     onSuccess: onUpdated,
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'No se pudo activar la ventana'),
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : 'No se pudo activar la ventana'),
   });
 
   const saveMutation = useMutation({
@@ -357,10 +472,12 @@ function PreorderWindowSection({ batch, batchId }: { batch: ImportBatchDetailDto
       setTimeout(() => setSaved(false), 2500);
       onUpdated(updated);
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'No se pudo guardar la ventana'),
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar la ventana'),
   });
 
-  const pct = batch.minUnits > 0 ? Math.min(100, Math.round((batch.unitCount / batch.minUnits) * 100)) : 0;
+  const pct =
+    batch.minUnits > 0 ? Math.min(100, Math.round((batch.unitCount / batch.minUnits) * 100)) : 0;
   const reached = batch.unitCount >= batch.minUnits;
   const closesPassed = batch.closesAt ? new Date(batch.closesAt) < new Date() : false;
 
@@ -369,11 +486,20 @@ function PreorderWindowSection({ batch, batchId }: { batch: ImportBatchDetailDto
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">Ventana de encargo</h2>
         {batch.isActive ? (
-          <Button size="sm" variant="outline" disabled={activeMutation.isPending} onClick={() => activeMutation.mutate(false)}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={activeMutation.isPending}
+            onClick={() => activeMutation.mutate(false)}
+          >
             Desactivar ventana
           </Button>
         ) : (
-          <Button size="sm" disabled={activeMutation.isPending || batch.status !== 'OPEN'} onClick={() => activeMutation.mutate(true)}>
+          <Button
+            size="sm"
+            disabled={activeMutation.isPending || batch.status !== 'OPEN'}
+            onClick={() => activeMutation.mutate(true)}
+          >
             Activar como ventana pública
           </Button>
         )}
@@ -381,7 +507,8 @@ function PreorderWindowSection({ batch, batchId }: { batch: ImportBatchDetailDto
 
       {batch.isActive && (
         <p className="text-xs text-emerald-600">
-          Esta es la ventana pública: la tienda muestra la cuenta regresiva y los pedidos por encargo se suman solos acá.
+          Esta es la ventana pública: la tienda muestra la cuenta regresiva y los pedidos por
+          encargo se suman solos acá.
           {closesPassed && ' ⚠️ El cierre ya pasó: la cuenta regresiva no se muestra.'}
         </p>
       )}
@@ -390,16 +517,22 @@ function PreorderWindowSection({ batch, batchId }: { batch: ImportBatchDetailDto
       <div>
         <div className="mb-1 flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Progreso del cupo</span>
-          <span className={reached ? 'font-semibold text-emerald-600' : 'font-semibold text-foreground'}>
+          <span
+            className={reached ? 'font-semibold text-emerald-600' : 'font-semibold text-foreground'}
+          >
             {batch.unitCount} / {batch.minUnits} unidades
           </span>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-          <div className={'h-full rounded-full ' + (reached ? 'bg-emerald-500' : 'bg-primary')} style={{ width: `${pct}%` }} />
+          <div
+            className={'h-full rounded-full ' + (reached ? 'bg-emerald-500' : 'bg-primary')}
+            style={{ width: `${pct}%` }}
+          />
         </div>
         {!reached && (
           <p className="mt-1 text-xs text-muted-foreground">
-            Faltan {batch.minUnits - batch.unitCount} para llegar al mínimo. Podés extender el cierre para que se llene.
+            Faltan {batch.minUnits - batch.unitCount} para llegar al mínimo. Podés extender el
+            cierre para que se llene.
           </p>
         )}
       </div>
@@ -407,15 +540,32 @@ function PreorderWindowSection({ batch, batchId }: { batch: ImportBatchDetailDto
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="space-y-1.5 sm:col-span-1">
           <Label htmlFor="closesAt">Cierre (cuenta regresiva)</Label>
-          <Input id="closesAt" type="datetime-local" value={closesAtLocal} onChange={(e) => setClosesAtLocal(e.target.value)} />
+          <Input
+            id="closesAt"
+            type="datetime-local"
+            value={closesAtLocal}
+            onChange={(e) => setClosesAtLocal(e.target.value)}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="promisedDays">Días de llegada (tras el cierre)</Label>
-          <Input id="promisedDays" type="number" min={1} value={promisedDays} onChange={(e) => setPromisedDays(e.target.value)} />
+          <Input
+            id="promisedDays"
+            type="number"
+            min={1}
+            value={promisedDays}
+            onChange={(e) => setPromisedDays(e.target.value)}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="minUnits">Cupo mínimo (unidades)</Label>
-          <Input id="minUnits" type="number" min={1} value={minUnits} onChange={(e) => setMinUnits(e.target.value)} />
+          <Input
+            id="minUnits"
+            type="number"
+            min={1}
+            value={minUnits}
+            onChange={(e) => setMinUnits(e.target.value)}
+          />
         </div>
       </div>
 

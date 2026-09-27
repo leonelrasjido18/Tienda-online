@@ -13,7 +13,16 @@ import {
 import { Button, Input, Label, Card, CardContent, Turnstile } from '@tienda/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { Truck, Store, CreditCard, Landmark, Wallet, CheckCircle2, ArrowRight } from 'lucide-react';
+import {
+  Truck,
+  Store,
+  CreditCard,
+  Landmark,
+  Wallet,
+  CheckCircle2,
+  ArrowRight,
+  MessageSquare,
+} from 'lucide-react';
 
 import { clientFetch } from '@/lib/client-api';
 import { useCart } from '@/lib/cart-context';
@@ -43,6 +52,7 @@ export default function CheckoutPage() {
   const [phone, setPhone] = useState('');
 
   const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('pickup');
+  const [tienda, setTienda] = useState<PublicStoreSettingsDto | null>(null);
   const [street, setStreet] = useState('');
   const [number, setNumber] = useState('');
   const [floor, setFloor] = useState('');
@@ -50,12 +60,6 @@ export default function CheckoutPage() {
   const [province, setProvince] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
-  const [shippingQuote, setShippingQuote] = useState<{
-    priceCents: number;
-    etaDays: number | null;
-    fallbackReason: string | null;
-  } | null>(null);
-  const [isQuoting, setIsQuoting] = useState(false);
 
   // La transferencia siempre está disponible, así que sirve de valor inicial
   // seguro hasta que el servidor diga qué pasarela está activa.
@@ -67,41 +71,16 @@ export default function CheckoutPage() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const [couponInput, setCouponInput] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountCents: number; freeShipping: boolean } | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountCents: number;
+    freeShipping: boolean;
+  } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
   // Cotización de envío en vivo: al escribir el CP (con un pequeño retardo) pregunta
   // el costo al proveedor activo. Todo el setState va dentro del timeout para no
-  // disparar la regla de setState síncrono en efecto.
-  useEffect(() => {
-    let cancelled = false;
-    const handle = setTimeout(() => {
-      const cp = postalCode.trim();
-      if (shippingMethod !== 'delivery' || cp.length < 4) {
-        if (!cancelled) setShippingQuote(null);
-        return;
-      }
-      if (!cancelled) setIsQuoting(true);
-      clientFetch<{ priceCents: number; etaDays: number | null; fallbackReason: string | null }>('/shipping/quote', {
-        method: 'POST',
-        body: JSON.stringify({ postalCode: cp, province: province || undefined, city: city || undefined }),
-      })
-        .then((res) => {
-          if (!cancelled) setShippingQuote(res);
-        })
-        .catch(() => {
-          if (!cancelled) setShippingQuote(null);
-        })
-        .finally(() => {
-          if (!cancelled) setIsQuoting(false);
-        });
-    }, 600);
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [postalCode, province, city, shippingMethod]);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +88,7 @@ export default function CheckoutPage() {
       .then((s) => {
         if (cancelled) return;
         setDepositPercent(s.defaultDepositPercent);
+        setTienda(s);
         const methods = s.enabledPaymentMethods as CheckoutPaymentMethod[];
         if (methods.length > 0) {
           setEnabledMethods(methods);
@@ -149,8 +129,12 @@ export default function CheckoutPage() {
   if (!cart || cart.items.length === 0) {
     return (
       <div className="mx-auto max-w-xl px-4 py-20 text-center">
-        <h1 className="text-2xl font-extrabold tracking-tight text-foreground">Tu carrito está vacío</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Agregá productos antes de continuar con la compra.</p>
+        <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
+          Tu carrito está vacío
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Agregá productos antes de continuar con la compra.
+        </p>
         <Button onClick={() => router.push('/productos')} className="mt-6">
           Ver productos disponibles
         </Button>
@@ -164,11 +148,18 @@ export default function CheckoutPage() {
     setCouponError(null);
     setIsApplyingCoupon(true);
     try {
-      const res = await clientFetch<{ code: string; discountCents: number; freeShipping: boolean }>('/coupons/validate', {
-        method: 'POST',
-        body: JSON.stringify({ code, subtotalCents: plan.subtotalCents }),
+      const res = await clientFetch<{ code: string; discountCents: number; freeShipping: boolean }>(
+        '/coupons/validate',
+        {
+          method: 'POST',
+          body: JSON.stringify({ code, subtotalCents: plan.subtotalCents }),
+        },
+      );
+      setAppliedCoupon({
+        code: res.code,
+        discountCents: res.discountCents,
+        freeShipping: res.freeShipping,
       });
-      setAppliedCoupon({ code: res.code, discountCents: res.discountCents, freeShipping: res.freeShipping });
     } catch (err) {
       setAppliedCoupon(null);
       setCouponError(err instanceof Error ? err.message : 'No pudimos aplicar el cupón.');
@@ -230,18 +221,30 @@ export default function CheckoutPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-extrabold tracking-tight text-foreground">Finalizar compra</h1>
         <div className="mt-4 flex items-center justify-between">
-          <div className={`flex items-center gap-2 text-xs font-bold ${step === 'contact' ? 'text-accent' : 'text-foreground'}`}>
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">1</span>
+          <div
+            className={`flex items-center gap-2 text-xs font-bold ${step === 'contact' ? 'text-accent' : 'text-foreground'}`}
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
+              1
+            </span>
             Contacto
           </div>
           <div className="h-0.5 flex-1 bg-border mx-2" />
-          <div className={`flex items-center gap-2 text-xs font-bold ${step === 'shipping' ? 'text-accent' : step === 'payment' ? 'text-foreground' : 'text-muted-foreground'}`}>
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">2</span>
+          <div
+            className={`flex items-center gap-2 text-xs font-bold ${step === 'shipping' ? 'text-accent' : step === 'payment' ? 'text-foreground' : 'text-muted-foreground'}`}
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
+              2
+            </span>
             Entrega
           </div>
           <div className="h-0.5 flex-1 bg-border mx-2" />
-          <div className={`flex items-center gap-2 text-xs font-bold ${step === 'payment' ? 'text-accent' : 'text-muted-foreground'}`}>
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">3</span>
+          <div
+            className={`flex items-center gap-2 text-xs font-bold ${step === 'payment' ? 'text-accent' : 'text-muted-foreground'}`}
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
+              3
+            </span>
             Pago
           </div>
         </div>
@@ -283,7 +286,9 @@ export default function CheckoutPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
-                <p className="text-[11px] text-muted-foreground">Te enviaremos el comprobante y el código de seguimiento aquí.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Te enviaremos el comprobante y el código de seguimiento aquí.
+                </p>
               </div>
 
               <div className="space-y-1.5">
@@ -297,7 +302,9 @@ export default function CheckoutPage() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                 />
-                <p className="text-[11px] text-muted-foreground">Para notificaciones instantáneas de envío por WhatsApp.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Para notificaciones instantáneas de envío por WhatsApp.
+                </p>
               </div>
 
               <Button type="submit" className="w-full gap-2 font-bold">
@@ -338,8 +345,13 @@ export default function CheckoutPage() {
                   />
                   <Store className="h-5 w-5 text-accent shrink-0" />
                   <div>
-                    <p className="text-sm font-bold text-foreground">Retiro en local</p>
-                    <p className="text-xs text-muted-foreground">Sin costo adicional</p>
+                    <p className="text-sm font-bold text-foreground">Retiro en Paraná</p>
+                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      Gratis
+                    </p>
+                    {tienda?.pickupAddress && (
+                      <p className="text-xs text-muted-foreground">{tienda.pickupAddress}</p>
+                    )}
                   </div>
                 </label>
 
@@ -359,7 +371,9 @@ export default function CheckoutPage() {
                       setShippingMethod('delivery');
                       // El efectivo es sólo para retiro en local: si estaba elegido, se resetea.
                       if (paymentMethod === 'cash') {
-                        setPaymentMethod(enabledMethods.find((m) => m !== 'cash') ?? 'bank_transfer');
+                        setPaymentMethod(
+                          enabledMethods.find((m) => m !== 'cash') ?? 'bank_transfer',
+                        );
                       }
                     }}
                     className="sr-only"
@@ -367,13 +381,27 @@ export default function CheckoutPage() {
                   <Truck className="h-5 w-5 text-accent shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-foreground">Envío a domicilio</p>
-                    <p className="text-xs text-muted-foreground">A todo el país</p>
+                    <p className="text-xs text-muted-foreground">
+                      A todo el país · coordinamos el costo por WhatsApp
+                    </p>
                   </div>
                 </label>
               </div>
 
               {shippingMethod === 'delivery' && (
                 <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+                  {/* El costo no se cobra acá: se cotiza a mano en el correo con esta
+                      dirección y se coordina con el cliente. Decirlo antes de que
+                      cargue los datos evita el reclamo de "me cobraron el envío". */}
+                  <div className="flex items-start gap-2 rounded-md border border-accent/30 bg-accent/10 p-3">
+                    <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                    <p className="text-xs leading-relaxed text-foreground">
+                      <span className="font-semibold">El envío no se cobra ahora.</span> Con tu
+                      dirección cotizamos el despacho y te escribimos por WhatsApp para coordinar el
+                      costo y la forma de pago antes de enviarlo.
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div className="sm:col-span-2 space-y-1.5">
                       <Label htmlFor="street">Calle</Label>
@@ -445,24 +473,6 @@ export default function CheckoutPage() {
                       value={postalCode}
                       onChange={(e) => setPostalCode(e.target.value)}
                     />
-                    {(isQuoting || shippingQuote) && (
-                      <div className="mt-1 rounded-md border border-border bg-background px-3 py-2 text-sm">
-                        {isQuoting ? (
-                          <span className="text-muted-foreground">Calculando costo de envío…</span>
-                        ) : shippingQuote && shippingQuote.priceCents > 0 ? (
-                          <span className="font-semibold text-foreground">
-                            Envío: {formatCentsAsArs(shippingQuote.priceCents)}
-                            {shippingQuote.etaDays ? (
-                              <span className="font-normal text-muted-foreground"> · llega en ~{shippingQuote.etaDays} días</span>
-                            ) : null}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            Coordinamos el costo de envío al confirmar tu pedido.
-                          </span>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -478,7 +488,12 @@ export default function CheckoutPage() {
               )}
 
               <div className="flex gap-3">
-                <Button type="button" variant="outline" className="w-1/3" onClick={() => setStep('contact')}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-1/3"
+                  onClick={() => setStep('contact')}
+                >
                   Volver
                 </Button>
                 <Button type="submit" className="w-2/3 gap-2 font-bold">
@@ -554,7 +569,9 @@ export default function CheckoutPage() {
               {appliedCoupon && appliedCoupon.discountCents > 0 && (
                 <div className="flex justify-between text-sm text-accent">
                   <span>Descuento ({appliedCoupon.code})</span>
-                  <span className="font-semibold">−{formatCentsAsArs(appliedCoupon.discountCents)}</span>
+                  <span className="font-semibold">
+                    −{formatCentsAsArs(appliedCoupon.discountCents)}
+                  </span>
                 </div>
               )}
 
@@ -562,7 +579,9 @@ export default function CheckoutPage() {
                 <>
                   <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border">
                     <span>Seña a abonar hoy (50%)</span>
-                    <span className="text-accent">{formatCentsAsArs(displayPlan.dueTodayCents)}</span>
+                    <span className="text-accent">
+                      {formatCentsAsArs(displayPlan.dueTodayCents)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>Saldo restante (al llegar a Arg)</span>
@@ -589,8 +608,12 @@ export default function CheckoutPage() {
               {/* Sólo se ofrecen los métodos que el backend tiene realmente
                   configurados: la pasarela de tarjeta se elige desde el servidor. */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {(shippingMethod === 'delivery' ? enabledMethods.filter((m) => m !== 'cash') : enabledMethods).map((method) => {
-                  const Icon = method === 'bank_transfer' ? Landmark : method === 'cash' ? Wallet : CreditCard;
+                {(shippingMethod === 'delivery'
+                  ? enabledMethods.filter((m) => m !== 'cash')
+                  : enabledMethods
+                ).map((method) => {
+                  const Icon =
+                    method === 'bank_transfer' ? Landmark : method === 'cash' ? Wallet : CreditCard;
                   return (
                     <label
                       key={method}
@@ -610,7 +633,9 @@ export default function CheckoutPage() {
                       />
                       <Icon className="h-5 w-5 text-accent shrink-0" />
                       <div>
-                        <p className="text-sm font-bold text-foreground">{PAYMENT_METHOD_LABELS[method]}</p>
+                        <p className="text-sm font-bold text-foreground">
+                          {PAYMENT_METHOD_LABELS[method]}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           {method === 'bank_transfer'
                             ? 'CBU / Alias bancario'
@@ -649,7 +674,12 @@ export default function CheckoutPage() {
             )}
 
             <div className="flex gap-3 pt-2">
-              <Button type="button" variant="outline" className="w-1/3" onClick={() => setStep('shipping')}>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-1/3"
+                onClick={() => setStep('shipping')}
+              >
                 Volver
               </Button>
               <Button

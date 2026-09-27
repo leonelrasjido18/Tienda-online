@@ -14,8 +14,12 @@ import { MiniCart } from './mini-cart';
 const NAV_LINKS = [
   { href: '/', label: 'Inicio' },
   { href: '/productos', label: 'Productos' },
+  // Los tres apartados del catálogo. Stock y encargo son disponibilidad (se
+  // resuelven por inventario real); pantalones es una categoría del catálogo.
+  { href: '/productos?disponibilidad=stock', label: 'Stock inmediato' },
+  { href: '/productos?disponibilidad=encargo', label: 'Por encargo' },
+  { href: '/productos?categorySlug=pantalones', label: 'Pantalones' },
   { href: '/como-funciona', label: 'Cómo funciona' },
-  { href: '/guia-de-talles', label: 'Guía de talles' },
   { href: '/contacto', label: 'Contacto' },
 ];
 

@@ -11,6 +11,12 @@ import { ShippingService } from './shipping.service';
 export class ShippingController {
   constructor(private readonly shipping: ShippingService) {}
 
+  /** Precios realmente cobrados, para armar la tabla con datos propios. */
+  @Get('observed')
+  observed() {
+    return this.shipping.observedRates();
+  }
+
   @Get()
   list() {
     return this.shipping.listRates();

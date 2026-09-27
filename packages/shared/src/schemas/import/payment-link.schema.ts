@@ -51,3 +51,15 @@ export const markBalancePaidSchema = z.object({
   note: z.string().max(300).nullish(),
 });
 export type MarkBalancePaidInput = z.infer<typeof markBalancePaidSchema>;
+
+/**
+ * Envío del link de saldo con el costo de envío cargado a mano.
+ *
+ * El tope existe para atajar el error de tipeo: sin él, cargar el monto en
+ * centavos en vez de pesos (850000 en lugar de 8500) le manda al cliente un
+ * cobro de un millón de pesos por un envío.
+ */
+export const sendBalanceLinkSchema = z.object({
+  shippingCents: z.number().int().min(0).max(100_000_00),
+});
+export type SendBalanceLinkInput = z.infer<typeof sendBalanceLinkSchema>;

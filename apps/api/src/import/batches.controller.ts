@@ -4,12 +4,14 @@ import {
   assignOrdersSchema,
   createImportBatchSchema,
   markBalancePaidSchema,
+  sendBalanceLinkSchema,
   setActiveWindowSchema,
   updateImportBatchSchema,
   type AdvanceImportBatchInput,
   type AssignOrdersInput,
   type CreateImportBatchInput,
   type MarkBalancePaidInput,
+  type SendBalanceLinkInput,
   type SetActiveWindowInput,
   type UpdateImportBatchInput,
 } from '@tienda/shared';
@@ -86,6 +88,19 @@ export class BatchesController {
   @UsePipes(new ZodValidationPipe(markBalancePaidSchema))
   markBalancePaid(@Param('orderId') orderId: string, @Body() body: MarkBalancePaidInput) {
     return this.balance.markPaidManually(orderId, body.note);
+  }
+
+  /**
+   * Manda el link de saldo de un pedido con el envio cargado a mano.
+   *
+   * Es manual porque todavia no hay credenciales de Correo Argentino: la duena
+   * cotiza en el sitio del correo y carga el numero aca.
+   */
+  @Roles('OWNER')
+  @Post('orders/:orderId/send-balance')
+  @UsePipes(new ZodValidationPipe(sendBalanceLinkSchema))
+  sendBalance(@Param('orderId') orderId: string, @Body() body: SendBalanceLinkInput) {
+    return this.balance.sendBalanceLink(orderId, body.shippingCents);
   }
 
   @Delete(':id')

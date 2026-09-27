@@ -100,6 +100,7 @@ export class OrdersService {
       fulfillmentStatus: order.fulfillmentStatus,
       totalCents: order.totalCents,
       balanceCents: order.balanceCents,
+      pickupInStore: order.pickupInStore,
       payments: order.payments.map((payment) => ({
         id: payment.id,
         kind: payment.kind,

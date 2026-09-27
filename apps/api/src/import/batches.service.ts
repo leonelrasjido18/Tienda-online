@@ -24,6 +24,30 @@ const BATCH_INCLUDE = {
 
 type BatchWithRelations = Prisma.ImportBatchGetPayload<{ include: typeof BATCH_INCLUDE }>;
 
+/** Una linea con la direccion, para pegar tal cual en el sitio de Correo. */
+function direccionDe(order: {
+  pickupInStore: boolean;
+  shippingStreet: string | null;
+  shippingNumber: string | null;
+  shippingFloor: string | null;
+  shippingCity: string | null;
+  shippingProvince: string | null;
+  shippingPostalCode: string | null;
+}): string | null {
+  if (order.pickupInStore) return null;
+  return (
+    [
+      [order.shippingStreet, order.shippingNumber].filter(Boolean).join(' '),
+      order.shippingFloor,
+      order.shippingCity,
+      order.shippingProvince,
+      order.shippingPostalCode ? `CP ${order.shippingPostalCode}` : null,
+    ]
+      .filter(Boolean)
+      .join(', ') || null
+  );
+}
+
 @Injectable()
 export class BatchesService {
   constructor(
@@ -59,6 +83,9 @@ export class BatchesService {
         province: order.shippingProvince,
         pickupInStore: order.pickupInStore,
         itemCount: order.items.length,
+        shippingAddress: direccionDe(order),
+        postalCode: order.shippingPostalCode,
+        contactPhone: order.contactPhone,
       })),
       events: batch.events.map((event) => ({
         id: event.id,
@@ -167,6 +194,9 @@ export class BatchesService {
       province: order.shippingProvince,
       pickupInStore: order.pickupInStore,
       itemCount: order.items.length,
+      shippingAddress: direccionDe(order),
+      postalCode: order.shippingPostalCode,
+      contactPhone: order.contactPhone,
     }));
   }
 

@@ -1,7 +1,21 @@
 import Link from 'next/link';
 import { SlidersHorizontal, Search } from 'lucide-react';
-import { productListQuerySchema, type ProductFacetsDto, type Paginated, type ProductListItemDto } from '@tienda/shared';
-import { Input, buttonVariants, Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@tienda/ui';
+import {
+  PRODUCT_AVAILABILITY_LABELS,
+  productListQuerySchema,
+  type ProductFacetsDto,
+  type Paginated,
+  type ProductListItemDto,
+} from '@tienda/shared';
+import {
+  Input,
+  buttonVariants,
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@tienda/ui';
 
 import { apiFetch } from '@/lib/api';
 import { ProductCard } from '@/components/product-card';
@@ -50,6 +64,7 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
     maxPrice: toSingle(rawParams.maxPrice),
     sort: toSingle(rawParams.sort),
     page: toSingle(rawParams.page),
+    disponibilidad: toSingle(rawParams.disponibilidad),
   });
 
   const listQs = buildQueryString({
@@ -63,6 +78,7 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
     maxPrice: query.maxPrice,
     sort: query.sort,
     page: String(query.page),
+    disponibilidad: query.disponibilidad,
   });
 
   const facetsQs = buildQueryString({
@@ -73,6 +89,7 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
     seasonId: query.seasonId,
     minPrice: query.minPrice,
     maxPrice: query.maxPrice,
+    disponibilidad: query.disponibilidad,
   });
 
   const [result, facets] = await Promise.all([
@@ -88,19 +105,72 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
     query.maxPrice,
   ].filter(Boolean).length;
 
+  // Pestañas de disponibilidad. Conservan el resto de los filtros y vuelven a la
+  // página 1: cambiar de pestaña estando en la página 7 dejaba al cliente en una
+  // página que en el otro apartado puede no existir.
+  const tabs = [
+    { key: undefined, label: 'Todo el catálogo' },
+    { key: 'stock' as const, label: PRODUCT_AVAILABILITY_LABELS.stock },
+    { key: 'encargo' as const, label: PRODUCT_AVAILABILITY_LABELS.encargo },
+  ];
+  const tabHref = (key: 'stock' | 'encargo' | undefined) =>
+    `/productos?${buildQueryString({
+      q: query.q,
+      leagueSlug: query.leagueSlug,
+      teamSlug: query.teamSlug,
+      categorySlug: query.categorySlug,
+      seasonId: query.seasonId,
+      size: query.size,
+      minPrice: query.minPrice,
+      maxPrice: query.maxPrice,
+      sort: query.sort === 'newest' ? undefined : query.sort,
+      disponibilidad: key,
+    })}`;
+
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-8">
+      <div className="mb-6 flex flex-wrap gap-2 border-b border-border pb-px">
+        {tabs.map((tab) => {
+          const activa = query.disponibilidad === tab.key;
+          return (
+            <Link
+              key={tab.label}
+              href={tabHref(tab.key)}
+              className={
+                'rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ' +
+                (activa
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-muted-foreground hover:text-foreground')
+              }
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
+      </div>
+
       {/* Header bar with Search and Mobile Filter Trigger */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <form method="GET" className="flex flex-1 max-w-md gap-2">
           {/* Hidden inputs to maintain active filters when performing a search */}
           {query.leagueSlug && <input type="hidden" name="leagueSlug" value={query.leagueSlug} />}
           {query.teamSlug && <input type="hidden" name="teamSlug" value={query.teamSlug} />}
-          {query.categorySlug && <input type="hidden" name="categorySlug" value={query.categorySlug} />}
+          {query.categorySlug && (
+            <input type="hidden" name="categorySlug" value={query.categorySlug} />
+          )}
+          {query.disponibilidad && (
+            <input type="hidden" name="disponibilidad" value={query.disponibilidad} />
+          )}
           {query.size && <input type="hidden" name="size" value={query.size} />}
-          {query.minPrice !== undefined && <input type="hidden" name="minPrice" value={query.minPrice} />}
-          {query.maxPrice !== undefined && <input type="hidden" name="maxPrice" value={query.maxPrice} />}
-          {query.sort && query.sort !== 'newest' && <input type="hidden" name="sort" value={query.sort} />}
+          {query.minPrice !== undefined && (
+            <input type="hidden" name="minPrice" value={query.minPrice} />
+          )}
+          {query.maxPrice !== undefined && (
+            <input type="hidden" name="maxPrice" value={query.maxPrice} />
+          )}
+          {query.sort && query.sort !== 'newest' && (
+            <input type="hidden" name="sort" value={query.sort} />
+          )}
 
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -121,7 +191,9 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
         <div className="flex items-center justify-between sm:hidden">
           <p className="text-sm font-medium text-muted-foreground">{result.total} productos</p>
           <Sheet>
-            <SheetTrigger className={buttonVariants({ variant: 'outline', size: 'sm', className: 'gap-2' })}>
+            <SheetTrigger
+              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'gap-2' })}
+            >
               <SlidersHorizontal className="h-4 w-4" /> Filtros
               {activeFilterCount > 0 && (
                 <span className="ml-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-accent-foreground">
@@ -149,15 +221,41 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
 
         {/* Product Grid */}
         <div>
+          {query.disponibilidad && (
+            <div className="mb-4">
+              <h1 className="text-xl font-bold text-foreground">
+                {PRODUCT_AVAILABILITY_LABELS[query.disponibilidad]}
+              </h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {query.disponibilidad === 'stock'
+                  ? 'Prendas disponibles para entrega inmediata.'
+                  : 'Se encargan a pedido y llegan en unos 20 días. Se reservan con una seña.'}
+              </p>
+            </div>
+          )}
+
           <div className="hidden sm:flex items-center justify-between mb-4">
-            <p className="text-sm font-medium text-muted-foreground">{result.total} productos encontrados</p>
+            <p className="text-sm font-medium text-muted-foreground">
+              {result.total} productos encontrados
+            </p>
           </div>
 
           {result.items.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border p-12 text-center">
-              <p className="text-base font-semibold text-foreground">No encontramos productos con esos filtros</p>
-              <p className="mt-1 text-sm text-muted-foreground">Intentá cambiar los términos de búsqueda o limpiar las opciones seleccionadas.</p>
-              <Link href="/productos" className={buttonVariants({ variant: 'outline', className: 'mt-4' })}>
+              <p className="text-base font-semibold text-foreground">
+                {query.disponibilidad === 'stock'
+                  ? 'Por ahora no hay prendas con entrega inmediata'
+                  : 'No encontramos productos con esos filtros'}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {query.disponibilidad === 'stock'
+                  ? 'Todo el catálogo está disponible por encargo, con seña y entrega en unos 20 días.'
+                  : 'Intentá cambiar los términos de búsqueda o limpiar las opciones seleccionadas.'}
+              </p>
+              <Link
+                href="/productos"
+                className={buttonVariants({ variant: 'outline', className: 'mt-4' })}
+              >
                 Ver todos los productos
               </Link>
             </div>

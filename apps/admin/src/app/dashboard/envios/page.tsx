@@ -16,7 +16,13 @@ import {
   TableHeader,
   TableRow,
 } from '@tienda/ui';
-import { AR_PROVINCES, formatCentsAsArs, parseArsToCents, type ShippingRateDto } from '@tienda/shared';
+import {
+  AR_PROVINCES,
+  formatCentsAsArs,
+  parseArsToCents,
+  type ObservedShippingRateDto,
+  type ShippingRateDto,
+} from '@tienda/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -36,7 +42,24 @@ export default function ShippingRatesPage() {
     queryFn: () => api<ShippingRateDto[]>('/admin/shipping/rates'),
   });
 
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['admin', 'shipping-rates'] });
+  // Lo que se cobro de verdad en los pedidos ya despachados. Es la fuente para
+  // armar la tabla con precios propios en vez de estimar.
+  const { data: observed } = useQuery({
+    queryKey: ['admin', 'shipping-observed'],
+    queryFn: () => api<ObservedShippingRateDto[]>('/admin/shipping/rates/observed'),
+  });
+
+  const invalidate = () =>
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'shipping-rates'] });
+
+  const adoptMutation = useMutation({
+    mutationFn: (row: ObservedShippingRateDto) =>
+      api('/admin/shipping/rates', {
+        method: 'PUT',
+        body: JSON.stringify({ province: row.province, priceCents: row.avgCents, etaDays: null }),
+      }),
+    onSuccess: invalidate,
+  });
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -62,7 +85,8 @@ export default function ShippingRatesPage() {
       setEtaDays('');
       invalidate();
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'El precio tiene que ser un número.'),
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : 'El precio tiene que ser un número.'),
   });
 
   const deleteMutation = useMutation({
@@ -74,8 +98,8 @@ export default function ShippingRatesPage() {
     <div className="mx-auto max-w-3xl">
       <h1 className="text-xl font-semibold">Costos de envío</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Precio por provincia. Se usa para cotizar el envío cuando llega un lote y se le cobra el saldo al
-        cliente. El retiro en el local siempre es gratis.
+        Precio por provincia. Se usa para cotizar el envío cuando llega un lote y se le cobra el
+        saldo al cliente. El retiro en el local siempre es gratis.
       </p>
 
       <div className="mt-6 rounded-lg border border-border bg-background p-4">
@@ -159,7 +183,9 @@ export default function ShippingRatesPage() {
             {rates?.map((rate) => (
               <TableRow key={rate.id}>
                 <TableCell className="font-medium">{rate.province}</TableCell>
-                <TableCell className="text-muted-foreground">{formatCentsAsArs(rate.priceCents)}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatCentsAsArs(rate.priceCents)}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {rate.etaDays !== null ? `${rate.etaDays} días` : '—'}
                 </TableCell>
@@ -169,7 +195,8 @@ export default function ShippingRatesPage() {
                     size="sm"
                     className="text-destructive"
                     onClick={() => {
-                      if (confirm(`¿Eliminar la tarifa de ${rate.province}?`)) deleteMutation.mutate(rate.id);
+                      if (confirm(`¿Eliminar la tarifa de ${rate.province}?`))
+                        deleteMutation.mutate(rate.id);
                     }}
                   >
                     Eliminar
@@ -179,6 +206,77 @@ export default function ShippingRatesPage() {
             ))}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="mt-8">
+        <h2 className="text-lg font-semibold text-foreground">Lo que cobraste de verdad</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Sale de los pedidos ya despachados: cada envío que cargás a mano afina este promedio.
+          Sirve para reemplazar las estimaciones por tus precios reales.
+        </p>
+
+        {!observed || observed.length === 0 ? (
+          <p className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+            Todavía no hay envíos despachados con costo cargado. Después de los primeros pedidos vas
+            a ver acá el precio real por provincia.
+          </p>
+        ) : (
+          <div className="mt-4 rounded-lg border border-border bg-background">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Provincia</TableHead>
+                  <TableHead>Promedio</TableHead>
+                  <TableHead>Rango</TableHead>
+                  <TableHead>Envíos</TableHead>
+                  <TableHead>Prendas prom.</TableHead>
+                  <TableHead className="w-32" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {observed.map((row) => {
+                  const cargada = rates?.find((r) => r.province === row.province);
+                  return (
+                    <TableRow key={row.province}>
+                      <TableCell className="font-medium">{row.province}</TableCell>
+                      <TableCell>{formatCentsAsArs(row.avgCents)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {row.minCents === row.maxCents
+                          ? '—'
+                          : `${formatCentsAsArs(row.minCents)} a ${formatCentsAsArs(row.maxCents)}`}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{row.samples}</TableCell>
+                      <TableCell className="text-muted-foreground">{row.avgItems}</TableCell>
+                      <TableCell className="text-right">
+                        {cargada?.priceCents === row.avgCents ? (
+                          <span className="text-xs text-muted-foreground">Ya es la tarifa</span>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={adoptMutation.isPending}
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `Usar ${formatCentsAsArs(row.avgCents)} como tarifa de ${row.province}?` +
+                                    ` (promedio de ${row.samples} envío/s)`,
+                                )
+                              ) {
+                                adoptMutation.mutate(row);
+                              }
+                            }}
+                          >
+                            Usar promedio
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -182,6 +182,8 @@ export const publicOrderDetailSchema = z.object({
   fulfillmentStatus: z.enum(ORDER_FULFILLMENT_STATUSES),
   totalCents: z.number().int(),
   balanceCents: z.number().int().nullable(),
+  /** Para saber si hay envio que coordinar o el cliente retira. */
+  pickupInStore: z.boolean(),
   payments: z.array(orderPaymentDtoSchema),
 });
 export type PublicOrderDetailDto = z.infer<typeof publicOrderDetailSchema>;

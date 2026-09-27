@@ -17,7 +17,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../sales/notifications/mail.service';
 import { PushService } from '../sales/notifications/push.service';
 import { PaymentProviderRegistry } from '../sales/payments/payment-provider.registry';
-import { ShippingService } from '../shipping/shipping.service';
 
 const LINK_INCLUDE = {
   order: {
@@ -33,7 +32,6 @@ export class BalanceService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly shipping: ShippingService,
     private readonly mail: MailService,
     private readonly push: PushService,
     private readonly payments: PaymentProviderRegistry,
@@ -41,110 +39,153 @@ export class BalanceService {
   ) {}
 
   /**
-   * Se dispara al marcar el lote como RECIBIDO: por cada pedido cotiza el envío,
-   * congela el monto en un link de cobro y le avisa al cliente por email.
+   * Se dispara al marcar el lote como RECIBIDO.
    *
-   * Es idempotente: un pedido que ya tiene link pendiente no genera otro, así que
-   * volver a marcar RECIBIDO (o reintentar tras un fallo) no duplica cobros.
+   * NO genera los links de cobro. El costo de envío lo carga la dueña a mano,
+   * pedido por pedido, cotizando en el sitio de Correo (todavía no hay
+   * credenciales de API). Si esto cotizara solo contra la tabla de provincias,
+   * con la tabla vacía saldrían mails cobrando $0 de envío.
+   *
+   * Lo único que hace es avisar que hay pedidos esperando ese dato, para que el
+   * lote recibido no quede en silencio.
    */
   async onBatchReceived(batchId: string) {
-    const orders = await this.prisma.order.findMany({
-      where: { importBatchId: batchId, financialStatus: { in: ['DEPOSIT_PAID', 'AWAITING_BALANCE'] } },
-      include: { coupon: true },
+    const pendientes = await this.prisma.order.count({
+      where: {
+        importBatchId: batchId,
+        financialStatus: { in: ['DEPOSIT_PAID', 'AWAITING_BALANCE'] },
+        paymentLinks: { none: { status: 'PENDING' } },
+      },
     });
 
-    const ttlDays = this.config.get('BALANCE_LINK_TTL_DAYS');
-    let generated = 0;
-
-    for (const order of orders) {
-      const existing = await this.prisma.paymentLink.findFirst({
-        where: { orderId: order.id, status: 'PENDING' },
-      });
-      if (existing) continue;
-
-      const quote = await this.shipping.quoteForOrder(order.id);
-      // Envío gratis: si el pedido usó un cupón FREE_SHIPPING, el cliente no paga
-      // el envío al saldar. Se cotiza igual (para el registro) pero se cobra 0.
-      const freeShipping = order.coupon?.type === 'FREE_SHIPPING';
-      const shippingChargeCents = freeShipping ? 0 : quote.priceCents;
-      const balanceCents = order.balanceCents ?? 0;
-      const amountCents = balanceCents + shippingChargeCents;
-
-      const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
-      const token = randomBytes(24).toString('base64url');
-
-      await this.prisma.$transaction(async (tx) => {
-        const freshOrder = await tx.order.findUniqueOrThrow({ where: { id: order.id } });
-        if (freshOrder.financialStatus !== 'AWAITING_BALANCE') {
-          if (!canTransitionOrderFinancial(freshOrder.financialStatus, 'AWAITING_BALANCE')) {
-            throw new BadRequestException(
-              `Transición inválida: no se puede pasar el estado financiero de ${freshOrder.financialStatus} a AWAITING_BALANCE`,
-            );
-          }
-        }
-
-        await tx.paymentLink.create({
-          data: {
-            token,
-            orderId: order.id,
-            balanceCents,
-            shippingCents: shippingChargeCents,
-            amountCents,
-            expiresAt,
-          },
-        });
-
-        await tx.order.update({
-          where: { id: order.id },
-          data: {
-            shippingCents: shippingChargeCents,
-            // El total ya descuenta el cupón aplicado en el checkout, más el envío cobrado.
-            totalCents: order.subtotalCents - order.discountCents + shippingChargeCents,
-            financialStatus: 'AWAITING_BALANCE',
-            fulfillmentStatus: 'READY',
-          },
-        });
-
-        await tx.orderEvent.create({
-          data: {
-            orderId: order.id,
-            type: 'balance_requested',
-            message: `Saldo solicitado: ${formatCentsAsArs(amountCents)} (envío ${formatCentsAsArs(shippingChargeCents)}${
-              freeShipping ? ' — envío gratis por cupón' : ''
-            }${quote.fallbackReason ? ` — ${quote.fallbackReason}` : ''})`,
-          },
-        });
-      });
-
-      await this.mail.sendBalanceRequest({
-        contactName: order.contactName,
-        contactEmail: order.contactEmail,
-        displayNumber: formatOrderNumber(order.number),
-        balanceCents,
-        shippingCents: shippingChargeCents,
-        amountCents,
-        url: this.publicUrl(token),
-        expiresAt,
-      });
-
-      generated += 1;
-    }
-
-    if (generated > 0) {
+    if (pendientes > 0) {
       await this.push.broadcast({
         title: 'Lote recibido',
-        body: `Se enviaron ${generated} pedido(s) de cobro de saldo`,
-        url: '/dashboard/lotes',
+        body: `${pendientes} pedido(s) esperando que cargues el costo de envío`,
       });
     }
 
-    this.logger.log(`Lote ${batchId}: ${generated} link(s) de saldo generados`);
-    return { generated };
+    return { pendientes };
+  }
+
+  /**
+   * Genera el link de saldo de UN pedido con el envío cargado a mano.
+   *
+   * Es idempotente: si el pedido ya tiene un link pendiente no crea otro, así que
+   * tocar el botón dos veces no le duplica el cobro al cliente.
+   */
+  async sendBalanceLink(orderId: string, shippingCents: number) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { coupon: true },
+    });
+    if (!order) {
+      throw new NotFoundException('El pedido no existe');
+    }
+    if (!['DEPOSIT_PAID', 'AWAITING_BALANCE'].includes(order.financialStatus)) {
+      throw new BadRequestException(
+        `El pedido está en ${order.financialStatus} y no corresponde pedirle el saldo`,
+      );
+    }
+
+    const existing = await this.prisma.paymentLink.findFirst({
+      where: { orderId: order.id, status: 'PENDING' },
+    });
+    if (existing) {
+      throw new BadRequestException('Ese pedido ya tiene un link de pago pendiente');
+    }
+
+    // Retira en local: no se le cobra envío aunque venga un monto cargado.
+    const cobrable = order.pickupInStore ? 0 : shippingCents;
+    await this.emitirLinkDeSaldo(order, cobrable);
+    return { ok: true };
+  }
+
+  /**
+   * Congela el monto en un link, deja el pedido esperando saldo y manda el mail.
+   * Lo comparten la carga manual y cualquier cotización automática futura.
+   */
+  private async emitirLinkDeSaldo(
+    order: Prisma.OrderGetPayload<{ include: { coupon: true } }>,
+    shippingQuotedCents: number,
+  ) {
+    const ttlDays = this.config.get('BALANCE_LINK_TTL_DAYS');
+
+    // Envío gratis: si el pedido usó un cupón FREE_SHIPPING, el cliente no paga
+    // el envío al saldar. Se cotiza igual (para el registro) pero se cobra 0.
+    const freeShipping = order.coupon?.type === 'FREE_SHIPPING';
+    const shippingChargeCents = freeShipping ? 0 : shippingQuotedCents;
+    const balanceCents = order.balanceCents ?? 0;
+    const amountCents = balanceCents + shippingChargeCents;
+
+    const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
+    const token = randomBytes(24).toString('base64url');
+
+    await this.prisma.$transaction(async (tx) => {
+      const freshOrder = await tx.order.findUniqueOrThrow({ where: { id: order.id } });
+      if (freshOrder.financialStatus !== 'AWAITING_BALANCE') {
+        if (!canTransitionOrderFinancial(freshOrder.financialStatus, 'AWAITING_BALANCE')) {
+          throw new BadRequestException(
+            `Transición inválida: no se puede pasar el estado financiero de ${freshOrder.financialStatus} a AWAITING_BALANCE`,
+          );
+        }
+      }
+
+      await tx.paymentLink.create({
+        data: {
+          token,
+          orderId: order.id,
+          balanceCents,
+          shippingCents: shippingChargeCents,
+          amountCents,
+          expiresAt,
+        },
+      });
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          shippingCents: shippingChargeCents,
+          // El total ya descuenta el cupón aplicado en el checkout, más el envío cobrado.
+          totalCents: order.subtotalCents - order.discountCents + shippingChargeCents,
+          financialStatus: 'AWAITING_BALANCE',
+          fulfillmentStatus: 'READY',
+        },
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: 'balance_requested',
+          message: `Saldo solicitado: ${formatCentsAsArs(amountCents)} (envío ${formatCentsAsArs(shippingChargeCents)}${
+            freeShipping ? ' — envío gratis por cupón' : ''
+          })`,
+        },
+      });
+    });
+
+    await this.mail.sendBalanceRequest({
+      contactName: order.contactName,
+      contactEmail: order.contactEmail,
+      displayNumber: formatOrderNumber(order.number),
+      balanceCents,
+      shippingCents: shippingChargeCents,
+      amountCents,
+      url: this.publicUrl(token),
+      expiresAt,
+    });
+
+    this.logger.log(
+      `Pedido ${formatOrderNumber(order.number)}: link de saldo por ${formatCentsAsArs(amountCents)}`,
+    );
   }
 
   /** Vista pública del link, por token. */
   async getByToken(token: string): Promise<BalanceCheckoutDto> {
-    const link = await this.prisma.paymentLink.findUnique({ where: { token }, include: LINK_INCLUDE });
+    const link = await this.prisma.paymentLink.findUnique({
+      where: { token },
+      include: LINK_INCLUDE,
+    });
     if (!link) {
       throw new NotFoundException('El link de pago no existe');
     }
@@ -191,7 +232,10 @@ export class BalanceService {
 
   /** Arranca el pago del saldo con la pasarela activa (o transferencia). */
   async startPayment(token: string, method: CheckoutPaymentMethod): Promise<PayBalanceResponse> {
-    const link = await this.prisma.paymentLink.findUnique({ where: { token }, include: { order: true } });
+    const link = await this.prisma.paymentLink.findUnique({
+      where: { token },
+      include: { order: true },
+    });
     if (!link) {
       throw new NotFoundException('El link de pago no existe');
     }
@@ -213,10 +257,17 @@ export class BalanceService {
       }
 
       const inFlightCardPayment = await tx.payment.findFirst({
-        where: { orderId: link.orderId, kind: 'BALANCE', status: 'PENDING', provider: { notIn: ['bank_transfer', 'cash'] } },
+        where: {
+          orderId: link.orderId,
+          kind: 'BALANCE',
+          status: 'PENDING',
+          provider: { notIn: ['bank_transfer', 'cash'] },
+        },
       });
       if (inFlightCardPayment) {
-        throw new BadRequestException('Ya hay un pago en curso para este saldo. Revisá tu email o esperá unos minutos.');
+        throw new BadRequestException(
+          'Ya hay un pago en curso para este saldo. Revisá tu email o esperá unos minutos.',
+        );
       }
 
       return tx.payment.create({
@@ -234,7 +285,8 @@ export class BalanceService {
       return {
         redirectUrl: null,
         // El efectivo se paga al retirar: no lleva datos bancarios.
-        bankTransferInstructions: method === 'bank_transfer' ? (settings?.bankTransferInstructions ?? null) : null,
+        bankTransferInstructions:
+          method === 'bank_transfer' ? (settings?.bankTransferInstructions ?? null) : null,
         amountCents: link.amountCents,
       };
     }
@@ -268,7 +320,11 @@ export class BalanceService {
       }),
     ]);
 
-    return { redirectUrl: checkout.redirectUrl, bankTransferInstructions: null, amountCents: link.amountCents };
+    return {
+      redirectUrl: checkout.redirectUrl,
+      bankTransferInstructions: null,
+      amountCents: link.amountCents,
+    };
   }
 
   /**

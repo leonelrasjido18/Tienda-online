@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ShippingQuoteDto, UpsertShippingRateInput } from '@tienda/shared';
+import type { ObservedShippingRateDto, ShippingQuoteDto, UpsertShippingRateInput } from '@tienda/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SHIPPING_PROVIDER, type ShippingProvider, type ShippingQuoteRequest } from './shipping-provider.interface';
@@ -73,6 +73,59 @@ export class ShippingService {
 
   listRates() {
     return this.prisma.shippingRate.findMany({ orderBy: { province: 'asc' } });
+  }
+
+  /**
+   * Lo que de verdad se cobro de envio, agrupado por provincia.
+   *
+   * No hay tabla aparte: cada pedido ya guarda su provincia y el envio que se le
+   * cobro, asi que las observaciones son los propios pedidos despachados. Cada
+   * vez que se carga un envio a mano (cotizado en el sitio del correo) este
+   * promedio se afina solo.
+   *
+   * Se excluyen los de retiro en local y los de envio $0 (cupon de envio gratis
+   * o provincia sin tarifa): meterlos hundiria el promedio con precios que
+   * nunca se cobraron.
+   */
+  async observedRates(): Promise<ObservedShippingRateDto[]> {
+    const orders = await this.prisma.order.findMany({
+      where: {
+        pickupInStore: false,
+        shippingCents: { gt: 0 },
+        shippingProvince: { not: null },
+      },
+      select: {
+        shippingProvince: true,
+        shippingCents: true,
+        updatedAt: true,
+        _count: { select: { items: true } },
+      },
+    });
+
+    const porProvincia = new Map<
+      string,
+      { montos: number[]; items: number[]; last: Date }
+    >();
+    for (const order of orders) {
+      const provincia = order.shippingProvince!;
+      const actual = porProvincia.get(provincia) ?? { montos: [], items: [], last: order.updatedAt };
+      actual.montos.push(order.shippingCents!);
+      actual.items.push(order._count.items);
+      if (order.updatedAt > actual.last) actual.last = order.updatedAt;
+      porProvincia.set(provincia, actual);
+    }
+
+    return [...porProvincia.entries()]
+      .map(([province, { montos, items, last }]) => ({
+        province,
+        samples: montos.length,
+        avgCents: Math.round(montos.reduce((a, b) => a + b, 0) / montos.length),
+        minCents: Math.min(...montos),
+        maxCents: Math.max(...montos),
+        avgItems: Number((items.reduce((a, b) => a + b, 0) / items.length).toFixed(1)),
+        lastAt: last.toISOString(),
+      }))
+      .sort((a, b) => a.province.localeCompare(b.province));
   }
 
   upsertRate(input: UpsertShippingRateInput) {

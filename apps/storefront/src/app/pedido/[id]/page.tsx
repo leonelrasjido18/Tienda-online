@@ -12,7 +12,7 @@ import { buttonVariants, Turnstile } from '@tienda/ui';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { Landmark, CreditCard } from 'lucide-react';
+import { Landmark, CreditCard, MessageSquare } from 'lucide-react';
 
 import { clientFetch } from '@/lib/client-api';
 import { trackEvent } from '@/lib/analytics';
@@ -31,6 +31,7 @@ export default function OrderConfirmationPage() {
   const searchParams = useSearchParams();
   const estado = searchParams.get('estado');
   const [order, setOrder] = useState<PublicOrderDetailDto | null>(null);
+  const [tienda, setTienda] = useState<PublicStoreSettingsDto | null>(null);
   const [bankTransferInstructions, setBankTransferInstructions] = useState<string | null>(null);
   const purchaseTracked = useRef(false);
 
@@ -47,7 +48,9 @@ export default function OrderConfirmationPage() {
       .then((ord) => {
         setOrder(ord);
         // If not bank transfer, show retry payment option immediately by default if order is PENDING
-        const hasBank = ord.payments.some((p) => p.provider === 'bank_transfer' && p.status === 'PENDING');
+        const hasBank = ord.payments.some(
+          (p) => p.provider === 'bank_transfer' && p.status === 'PENDING',
+        );
         if (!hasBank) {
           setShowRetry(true);
         }
@@ -56,9 +59,13 @@ export default function OrderConfirmationPage() {
   }, [params.id]);
 
   useEffect(() => {
-    if (!order?.payments.some((p) => p.provider === 'bank_transfer' && p.status === 'PENDING')) return;
-    clientFetch<{ bankTransferInstructions: string | null }>('/settings')
-      .then((s) => setBankTransferInstructions(s.bankTransferInstructions))
+    if (!order?.payments.some((p) => p.provider === 'bank_transfer' && p.status === 'PENDING'))
+      return;
+    clientFetch<PublicStoreSettingsDto>('/settings')
+      .then((s) => {
+        setBankTransferInstructions(s.bankTransferInstructions);
+        setTienda(s);
+      })
       .catch(() => undefined);
   }, [order]);
 
@@ -93,7 +100,9 @@ export default function OrderConfirmationPage() {
     return <p className="mx-auto max-w-xl px-4 py-8 text-sm text-muted-foreground">Cargando…</p>;
   }
 
-  const pendingBankTransfer = order.payments.find((p) => p.provider === 'bank_transfer' && p.status === 'PENDING');
+  const pendingBankTransfer = order.payments.find(
+    (p) => p.provider === 'bank_transfer' && p.status === 'PENDING',
+  );
 
   async function handleRetryPayment() {
     setRetryError(null);
@@ -118,7 +127,11 @@ export default function OrderConfirmationPage() {
       }
       setShowRetry(false);
     } catch (err) {
-      setRetryError(err instanceof Error ? err.message : 'Ocurrió un error al procesar el pago. Intente nuevamente.');
+      setRetryError(
+        err instanceof Error
+          ? err.message
+          : 'Ocurrió un error al procesar el pago. Intente nuevamente.',
+      );
     } finally {
       setRetrying(false);
     }
@@ -128,7 +141,8 @@ export default function OrderConfirmationPage() {
     <div className="mx-auto max-w-xl px-4 py-12 text-center">
       <h1 className="text-2xl font-semibold">¡Gracias, {order.contactName.split(' ')[0]}!</h1>
       <p className="mt-2 text-muted-foreground">
-        Tu pedido {order.displayNumber} fue registrado{estado ? ` — ${ESTADO_LABELS[estado] ?? estado}` : ''}.
+        Tu pedido {order.displayNumber} fue registrado
+        {estado ? ` — ${ESTADO_LABELS[estado] ?? estado}` : ''}.
       </p>
 
       <div className="mt-6 rounded-lg border border-border p-4 text-left">
@@ -146,10 +160,33 @@ export default function OrderConfirmationPage() {
         </dl>
       </div>
 
+      {!order.pickupInStore && tienda?.whatsappPhone && (
+        <div className="mt-6 rounded-lg border border-accent/30 bg-accent/10 p-4 text-left">
+          <p className="text-sm font-semibold text-foreground">Falta coordinar el envío</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Con tu dirección cotizamos el despacho. Escribinos por WhatsApp y cerramos el costo y la
+            forma de pago del envío.
+          </p>
+          <a
+            href={`https://wa.me/${tienda.whatsappPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
+              `Hola! Acabo de hacer el pedido ${order.displayNumber} y quiero coordinar el envío.`,
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:opacity-90"
+          >
+            <MessageSquare className="h-4 w-4" /> Coordinar por WhatsApp
+          </a>
+        </div>
+      )}
+
       {pendingBankTransfer && !showRetry && (
         <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4 text-left text-sm space-y-4">
           <div>
-            <p className="font-medium">Transferí {formatCentsAsArs(pendingBankTransfer.amountCents)} para confirmar tu pedido.</p>
+            <p className="font-medium">
+              Transferí {formatCentsAsArs(pendingBankTransfer.amountCents)} para confirmar tu
+              pedido.
+            </p>
             <p className="mt-1 text-muted-foreground">
               Te vamos a avisar por email apenas confirmemos la recepción de la transferencia.
             </p>
@@ -199,7 +236,9 @@ export default function OrderConfirmationPage() {
                   />
                   <Icon className="h-4 w-4 text-accent shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-foreground">{PAYMENT_METHOD_LABELS[method]}</p>
+                    <p className="text-xs font-bold text-foreground">
+                      {PAYMENT_METHOD_LABELS[method]}
+                    </p>
                   </div>
                 </label>
               );
@@ -215,9 +254,7 @@ export default function OrderConfirmationPage() {
             />
           )}
 
-          {retryError && (
-            <p className="text-xs text-destructive">{retryError}</p>
-          )}
+          {retryError && <p className="text-xs text-destructive">{retryError}</p>}
 
           <div className="flex gap-2">
             {pendingBankTransfer && (
@@ -237,7 +274,11 @@ export default function OrderConfirmationPage() {
                 (pendingBankTransfer ? 'w-2/3' : 'w-full')
               }
             >
-              {retrying ? 'Procesando...' : selectedMethod === 'bank_transfer' ? 'Elegir transferencia' : 'Pagar ahora'}
+              {retrying
+                ? 'Procesando...'
+                : selectedMethod === 'bank_transfer'
+                  ? 'Elegir transferencia'
+                  : 'Pagar ahora'}
             </button>
           </div>
         </div>

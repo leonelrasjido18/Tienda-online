@@ -18,6 +18,19 @@ function combinationKey(ids: string[]): string {
   return [...ids].sort().join('|');
 }
 
+/** Sin acentos y en minúscula: los nombres de opción los escribe el vendedor a mano. */
+function normalizeName(name: string): string {
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+/** "talle", "talle y manga", "talle, manga y color"… para los textos de ayuda. */
+function optionsPrompt(options: ProductDetailDto['options']): string {
+  const names = options.map((o) => o.name.toLowerCase());
+  if (names.length === 0) return 'las opciones';
+  if (names.length === 1) return names[0]!;
+  return `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]!}`;
+}
+
 export function VariantSelector({ product }: { product: ProductDetailDto }) {
   const router = useRouter();
   const { addItem } = useCart();
@@ -54,7 +67,7 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
   const hasFullSelection = selectedIds.length === product.options.length;
   const activeVariant = hasFullSelection ? variantByKey.get(combinationKey(selectedIds)) : undefined;
 
-  const images = product.images.length > 0 ? product.images : [];
+  const images = product.images;
   const [activeImageId, setActiveImageId] = useState<string | null>(null);
 
   const selectedImage =
@@ -65,11 +78,36 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
   const customizationImage =
     images.find((img) => img.id === product.customization?.customizationImageId) ?? images[0];
 
-  // Mangas largas: si el vendedor marcó una foto como manga larga, se muestra un
-  // toggle que cambia la imagen principal entre la corta (por defecto) y la larga.
+  // Mangas largas. Hay dos formas de tenerlas y son muy distintas para el cliente:
+  //
+  //   1. Como OPCIÓN de compra ("Manga: Corta / Larga"). Genera una variante por
+  //      cada talle, así que cada combinación lleva su propio stock y su propio
+  //      precio: se puede tener manga larga con entrega inmediata y la corta por
+  //      encargo, o al revés. No necesita nada especial acá, porque la opción se
+  //      dibuja sola con el resto y la foto la cambia el vínculo imagen→opción.
+  //
+  //   2. Solo como FOTO marcada `isLongSleeve`, sin variante detrás. No se puede
+  //      comprar por separado, así que lo único honesto es un toggle que cambia
+  //      la foto que se está mirando y nada más.
+  //
+  // Si el producto tiene la opción, el toggle sobra y confunde: daría a entender
+  // que se elige algo cuando el que decide la compra es el selector de opciones.
+  const sleeveOption = product.options.find((o) => normalizeName(o.name).includes('manga'));
   const longSleeveImage = images.find((img) => img.isLongSleeve);
   const shortSleeveImage = images.find((img) => !img.isLongSleeve) ?? images[0];
-  const isLongSleeveActive = !!longSleeveImage && selectedImage?.id === longSleeveImage.id;
+  // Se le pregunta a la foto que se esta mirando, no si es "la primera de manga
+  // larga": cuando hay frente y espalda las dos van marcadas, y comparar contra
+  // la primera dejaba el boton en "Manga corta" al pasar a la segunda.
+  const isLongSleeveActive = !!selectedImage?.isLongSleeve;
+  const showSleeveToggle = !sleeveOption && !!longSleeveImage;
+
+  // Valores de opción que mandan sobre la foto principal (manga, color…). Sirve
+  // para saber cuándo hay que soltar la miniatura elegida a mano: si no, el
+  // cliente toca una miniatura y a partir de ahí cambiar de manga no hace nada.
+  const optionValueIdsWithImage = useMemo(
+    () => new Set(images.map((img) => img.optionValueId).filter((id): id is string => !!id)),
+    [images],
+  );
 
   const totalCents = activeVariant ? activeVariant.priceCents + customizationValue.extraCents : undefined;
   const canBuy = !!activeVariant && activeVariant.inventory.available > 0 && customizationValue.valid;
@@ -121,7 +159,7 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
           )}
         </div>
 
-        {longSleeveImage && (
+        {showSleeveToggle && longSleeveImage && (
           <div className="mt-4 inline-flex rounded-lg border border-border p-1">
             <button
               type="button"
@@ -218,7 +256,12 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
                   <button
                     key={value.id}
                     type="button"
-                    onClick={() => setSelected((s) => ({ ...s, [option.id]: value.id }))}
+                    onClick={() => {
+                      setSelected((s) => ({ ...s, [option.id]: value.id }));
+                      // Solo para las opciones que tienen foto propia: cambiar de
+                      // talle no debería sacarte de la foto que estabas mirando.
+                      if (optionValueIdsWithImage.has(value.id)) setActiveImageId(null);
+                    }}
                     className={
                       'rounded-lg border px-4 py-2 text-sm font-medium transition-all ' +
                       (active
@@ -271,7 +314,7 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
                   ? 'Sin stock disponible'
                   : hasFullSelection
                     ? 'Opción no disponible'
-                    : 'Elegí talle y versión'}
+                    : `Elegí ${optionsPrompt(product.options)}`}
         </button>
 
         {addError && <p className="mt-2 text-sm text-destructive">{addError}</p>}
@@ -346,7 +389,9 @@ function AvailabilityBadge({ product, variant }: { product: ProductDetailDto; va
     return product.variants.length === 0 ? (
       <p className="text-xs text-muted-foreground">Próximamente disponible.</p>
     ) : (
-      <p className="text-xs text-muted-foreground">Seleccioná talle y versión para ver stock y modalidad.</p>
+      <p className="text-xs text-muted-foreground">
+        Seleccioná {optionsPrompt(product.options)} para ver stock y modalidad.
+      </p>
     );
   }
 

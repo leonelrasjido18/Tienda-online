@@ -16,7 +16,18 @@ const MAX_SORTABLE_PRODUCTS = 2000;
 // que la clienta la nombra "Talle" al cargar el producto (documentado en el panel).
 const SIZE_OPTION_NAME = 'Talle';
 
-type FacetFilters = Pick<ProductListQuery, 'q' | 'leagueSlug' | 'teamSlug' | 'categorySlug' | 'seasonId' | 'size' | 'minPrice' | 'maxPrice'>;
+type FacetFilters = Pick<
+  ProductListQuery,
+  | 'q'
+  | 'leagueSlug'
+  | 'teamSlug'
+  | 'categorySlug'
+  | 'seasonId'
+  | 'size'
+  | 'minPrice'
+  | 'maxPrice'
+  | 'disponibilidad'
+>;
 
 @Injectable()
 export class PublicCatalogService {
@@ -210,6 +221,19 @@ export class PublicCatalogService {
       where.seasonId = filters.seasonId;
     }
 
+    // Stock inmediato = hay unidades fisicas disponibles ahora. Se mira el
+    // inventario real y no fulfillmentMode, porque ese campo dice como se PUEDE
+    // vender, no si hay mercaderia: un producto marcado "en stock" con 0
+    // unidades entraria igual al apartado y el cliente no podria comprarlo.
+    // Va por AND y no por where.variants directo: mas abajo talle y precio usan
+    // esa misma clave, y el ultimo en escribir pisaba al otro.
+    const condiciones: Prisma.ProductWhereInput[] = [];
+    if (filters.disponibilidad === 'stock') {
+      condiciones.push({ variants: { some: { inventory: { quantity: { gt: 0 } } } } });
+    } else if (filters.disponibilidad === 'encargo') {
+      condiciones.push({ variants: { none: { inventory: { quantity: { gt: 0 } } } } });
+    }
+
     // Talle y precio filtran sobre la misma variante: tiene que existir una variante
     // que cumpla las dos condiciones a la vez, no dos variantes distintas por separado.
     const variantWhere: Prisma.ProductVariantWhereInput = {};
@@ -226,7 +250,10 @@ export class PublicCatalogService {
       };
     }
     if (Object.keys(variantWhere).length > 0) {
-      where.variants = { some: variantWhere };
+      condiciones.push({ variants: { some: variantWhere } });
+    }
+    if (condiciones.length > 0) {
+      where.AND = condiciones;
     }
 
     return where;
