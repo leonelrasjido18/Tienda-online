@@ -14,6 +14,7 @@ import { Ruler, ShieldCheck, RefreshCw } from 'lucide-react';
 import Image from 'next/image';
 
 import { useCart } from '@/lib/cart-context';
+import { AccionesProducto } from './acciones-producto';
 import { resolveImageUrl } from '@/lib/media';
 import { CustomizationBlock, type CustomizationValue } from './customization-block';
 import { SIZE_GUIDES } from '@/content/size-guides';
@@ -310,6 +311,8 @@ export function VariantSelector({
             {formatCentsAsArs(activeVariant.priceCents)} base + {formatCentsAsArs(customizationValue.extraCents)} de personalización
           </p>
         )}
+
+        <AccionesProducto product={product} />
 
         {/* Options (Size, Version, etc) */}
         {product.options.map((option) => (

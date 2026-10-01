@@ -15,6 +15,7 @@ export * from './schemas/catalog/season.schema';
 export * from './schemas/catalog/brand.schema';
 export * from './schemas/catalog/category.schema';
 export * from './schemas/catalog/collection.schema';
+export * from './schemas/catalog/bulk-edit.schema';
 export * from './schemas/catalog/bulk-pricing.schema';
 export * from './schemas/catalog/product.schema';
 export * from './schemas/catalog/product-namer.schema';

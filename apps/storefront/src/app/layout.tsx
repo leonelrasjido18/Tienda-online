@@ -7,6 +7,7 @@ import { SiteFooter } from '@/components/site-footer';
 import { PreorderBanner } from '@/components/preorder-banner';
 import { AnalyticsScripts } from '@/components/analytics-scripts';
 import { CartProvider } from '@/lib/cart-context';
+import { FavoritosProvider } from '@/lib/favoritos-context';
 import { getPreorderWindow } from '@/lib/api-safe';
 import { siteConfig } from '@/lib/site-config';
 
@@ -47,10 +48,12 @@ export default async function RootLayout({ children }: LayoutProps<'/'>) {
       <AnalyticsScripts />
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <CartProvider>
+          <FavoritosProvider>
           <PreorderBanner window={preorderWindow} />
           <SiteHeader />
           <main className="flex-1">{children}</main>
           <SiteFooter />
+          </FavoritosProvider>
         </CartProvider>
       </body>
     </html>

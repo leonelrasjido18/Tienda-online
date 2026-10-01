@@ -37,6 +37,7 @@ const NAV: NavEntry[] = [
     items: [
       { href: '/dashboard/productos', label: 'Productos' },
       { href: '/dashboard/precios', label: 'Ajuste de precios' },
+      { href: '/dashboard/edicion-masiva', label: 'Edición masiva' },
       { href: '/dashboard/ligas', label: 'Ligas' },
       { href: '/dashboard/equipos', label: 'Equipos' },
       { href: '/dashboard/temporadas', label: 'Temporadas' },

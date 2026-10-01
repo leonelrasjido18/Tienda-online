@@ -4,7 +4,7 @@ import { formatCentsAsArs } from '@tienda/shared';
 import { buttonVariants, Card, CardContent } from '@tienda/ui';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ShoppingBag, Trash2, ArrowRight, Sparkles, RefreshCw } from 'lucide-react';
+import { ShoppingBag, Trash2, ArrowLeft, ArrowRight, Sparkles, RefreshCw } from 'lucide-react';
 
 import { useCart } from '@/lib/cart-context';
 import { resolveImageUrl } from '@/lib/media';
@@ -135,6 +135,19 @@ export default function CartPage() {
 
               <Link href="/checkout" className={buttonVariants({ size: 'lg', className: 'w-full gap-2 font-bold' })}>
                 Continuar la compra <ArrowRight className="h-4 w-4" />
+              </Link>
+
+              {/* Volver al catálogo sin perder el carrito: antes la única salida
+                  era el botón de atrás del navegador. */}
+              <Link
+                href="/productos"
+                className={buttonVariants({
+                  variant: 'outline',
+                  size: 'lg',
+                  className: 'mt-2 w-full gap-2',
+                })}
+              >
+                <ArrowLeft className="h-4 w-4" /> Seguir comprando
               </Link>
             </CardContent>
           </Card>

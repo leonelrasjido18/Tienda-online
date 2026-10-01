@@ -204,9 +204,25 @@ export class PublicCatalogService {
 
   private buildWhere(filters: FacetFilters): Prisma.ProductWhereInput {
     const where: Prisma.ProductWhereInput = { status: 'ACTIVE' };
+    // Todas las condiciones van por AND: varias usan la misma clave
+    // (`variants`) y la ultima en escribir pisaba a la anterior.
+    const condiciones: Prisma.ProductWhereInput[] = [];
 
     if (filters.q) {
-      where.name = { contains: filters.q, mode: 'insensitive' };
+      // Cada palabra tiene que aparecer en el nombre, el equipo o la liga.
+      // Antes se buscaba la frase entera dentro del nombre, asi que "boca
+      // titular" no encontraba nada: el producto se llama "Camiseta Boca
+      // Juniors - Titular - 2026-27" y la frase exacta nunca esta.
+      const palabras = filters.q.split(/\s+/).filter(Boolean).slice(0, 6);
+      for (const palabra of palabras) {
+        condiciones.push({
+          OR: [
+            { name: { contains: palabra, mode: 'insensitive' } },
+            { team: { name: { contains: palabra, mode: 'insensitive' } } },
+            { league: { name: { contains: palabra, mode: 'insensitive' } } },
+          ],
+        });
+      }
     }
     if (filters.leagueSlug) {
       where.league = { slug: filters.leagueSlug };
@@ -225,9 +241,6 @@ export class PublicCatalogService {
     // inventario real y no fulfillmentMode, porque ese campo dice como se PUEDE
     // vender, no si hay mercaderia: un producto marcado "en stock" con 0
     // unidades entraria igual al apartado y el cliente no podria comprarlo.
-    // Va por AND y no por where.variants directo: mas abajo talle y precio usan
-    // esa misma clave, y el ultimo en escribir pisaba al otro.
-    const condiciones: Prisma.ProductWhereInput[] = [];
     if (filters.disponibilidad === 'stock') {
       condiciones.push({ variants: { some: { inventory: { quantity: { gt: 0 } } } } });
     } else if (filters.disponibilidad === 'encargo') {

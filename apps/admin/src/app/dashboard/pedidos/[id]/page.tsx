@@ -3,12 +3,13 @@
 import { Badge, Button } from '@tienda/ui';
 import { formatCentsAsArs, type OrderDetailDto } from '@tienda/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Mail } from 'lucide-react';
+import { Mail, Undo2 } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { resolveImageUrl } from '@/lib/media';
 import { useApi } from '@/lib/use-api';
+import { calcularReembolsable, ReembolsoDialog } from './reembolso-dialog';
 
 const FINANCIAL_STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pendiente',
@@ -46,6 +47,7 @@ export default function OrderDetailPage() {
   });
 
   const [avisoCorreo, setAvisoCorreo] = useState<string | null>(null);
+  const [reembolsoAbierto, setReembolsoAbierto] = useState(false);
 
   // Reenvío de la confirmación: hace falta cuando el correo no salió (SMTP
   // caído) o cuando se corrigió un pedido a mano.
@@ -97,18 +99,27 @@ export default function OrderDetailPage() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <Badge>{FINANCIAL_STATUS_LABELS[order.financialStatus]}</Badge>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setAvisoCorreo(null);
-              resendConfirmation.mutate();
-            }}
-            disabled={resendConfirmation.isPending}
-          >
-            <Mail className="mr-2 h-3.5 w-3.5" />
-            {resendConfirmation.isPending ? 'Enviando…' : 'Reenviar confirmación'}
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAvisoCorreo(null);
+                resendConfirmation.mutate();
+              }}
+              disabled={resendConfirmation.isPending}
+            >
+              <Mail className="mr-2 h-3.5 w-3.5" />
+              {resendConfirmation.isPending ? 'Enviando…' : 'Reenviar confirmación'}
+            </Button>
+            {/* Sólo si hay plata cobrada que devolver. */}
+            {calcularReembolsable(order).resta > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setReembolsoAbierto(true)}>
+                <Undo2 className="mr-2 h-3.5 w-3.5" />
+                Devolver dinero
+              </Button>
+            )}
+          </div>
           {avisoCorreo && <p className="max-w-xs text-right text-xs text-muted-foreground">{avisoCorreo}</p>}
         </div>
       </div>
@@ -238,6 +249,8 @@ export default function OrderDetailPage() {
           </section>
         </div>
       </div>
+
+      <ReembolsoDialog order={order} abierto={reembolsoAbierto} onClose={() => setReembolsoAbierto(false)} />
     </div>
   );
 }

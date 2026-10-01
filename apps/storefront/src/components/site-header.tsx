@@ -7,6 +7,7 @@ import { Heart, Menu, Search, ShoppingBag, User, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, ThemeToggle } from '@tienda/ui';
 
 import { useCart } from '@/lib/cart-context';
+import { useFavoritos } from '@/lib/favoritos-context';
 import { siteConfig } from '@/lib/site-config';
 import { Logo } from './logo';
 import { MiniCart } from './mini-cart';
@@ -26,6 +27,8 @@ const NAV_LINKS = [
 export function SiteHeader() {
   const router = useRouter();
   const { cart } = useCart();
+  const { favoritos } = useFavoritos();
+  const cantidadFavoritos = favoritos.length;
   const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -111,13 +114,19 @@ export function SiteHeader() {
               <User className="h-5 w-5" />
             </Link>
 
-            {/* Favoritos */}
+            {/* Favoritos. Antes apuntaba a /mi-cuenta: el corazón prometía algo
+                que no existía. */}
             <Link
-              href="/mi-cuenta"
-              className="hidden h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:inline-flex"
-              aria-label="Favoritos"
+              href="/favoritos"
+              className="relative hidden h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:inline-flex"
+              aria-label={cantidadFavoritos > 0 ? `Favoritos (${cantidadFavoritos})` : 'Favoritos'}
             >
-              <Heart className="h-5 w-5" />
+              <Heart className={'h-5 w-5 ' + (cantidadFavoritos > 0 ? 'fill-current text-accent' : '')} />
+              {cantidadFavoritos > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-accent-foreground">
+                  {cantidadFavoritos}
+                </span>
+              )}
             </Link>
 
             {/* Cart */}
