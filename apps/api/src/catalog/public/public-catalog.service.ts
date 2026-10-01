@@ -237,18 +237,14 @@ export class PublicCatalogService {
       where.seasonId = filters.seasonId;
     }
 
-    // Stock inmediato = hay unidades fisicas disponibles ahora. Se mira el
-    // inventario real y no fulfillmentMode, porque ese campo dice como se PUEDE
-    // vender, no si hay mercaderia: un producto marcado "en stock" con 0
-    // unidades entraria igual al apartado y el cliente no podria comprarlo.
-    if (filters.disponibilidad === 'stock') {
-      condiciones.push({ variants: { some: { inventory: { quantity: { gt: 0 } } } } });
-    } else if (filters.disponibilidad === 'encargo') {
-      condiciones.push({ variants: { none: { inventory: { quantity: { gt: 0 } } } } });
-    }
-
-    // Talle y precio filtran sobre la misma variante: tiene que existir una variante
-    // que cumpla las dos condiciones a la vez, no dos variantes distintas por separado.
+    // Talle, precio y stock filtran sobre la MISMA variante: tiene que existir una
+    // variante que cumpla las tres condiciones a la vez, no tres variantes distintas
+    // que cumplan una cada una.
+    //
+    // El stock vivia aparte y por eso "Stock inmediato + talle XL" devolvia camisetas
+    // sin XL: alcanzaba con que el producto tuviera stock de cualquier talle y ofreciera
+    // XL en el catalogo. Los cinco talles daban 95, el total de productos con algo de
+    // stock. Los reales son L 49, M 34, S 12, XL 55, XXL 51.
     const variantWhere: Prisma.ProductVariantWhereInput = {};
     if (filters.size) {
       variantWhere.optionValues = {
@@ -262,6 +258,18 @@ export class PublicCatalogService {
         ...(filters.maxPrice !== undefined ? { lte: filters.maxPrice * 100 } : {}),
       };
     }
+
+    // Stock inmediato = hay unidades fisicas disponibles ahora. Se mira el
+    // inventario real y no fulfillmentMode, porque ese campo dice como se PUEDE
+    // vender, no si hay mercaderia: un producto marcado "en stock" con 0
+    // unidades entraria igual al apartado y el cliente no podria comprarlo.
+    if (filters.disponibilidad === 'stock') {
+      variantWhere.inventory = { quantity: { gt: 0 } };
+    } else if (filters.disponibilidad === 'encargo') {
+      // Por encargo sigue siendo a nivel producto: no hay stock de ningun talle.
+      condiciones.push({ variants: { none: { inventory: { quantity: { gt: 0 } } } } });
+    }
+
     if (Object.keys(variantWhere).length > 0) {
       condiciones.push({ variants: { some: variantWhere } });
     }
@@ -427,19 +435,23 @@ export class PublicCatalogService {
       params.push(filters.seasonId);
       paramIdx++;
     }
-    // Disponibilidad y precio faltaban: en la pestaña "Stock inmediato" los
-    // talles se contaban sobre TODO el catálogo, así que ofrecía "XL (2756)"
-    // cuando había 68 productos con stock. El resto de las facetas (ligas,
-    // rango de precios) sí los respetaba, con lo cual el panel se contradecía.
-    const EXISTE_STOCK = `EXISTS (
-      SELECT 1 FROM product_variants sv
-      JOIN inventory_items si ON si."variantId" = sv.id
-      WHERE sv."productId" = p.id AND si.quantity > 0
-    )`;
+    // El stock se mide sobre la variante que se esta contando (pv), no sobre el
+    // producto. Preguntando por producto, una camiseta con stock solo en XL hacia
+    // contar TODOS sus talles, y la faceta mostraba el mismo numero en los cinco
+    // (95, el total de productos con algo de stock) en vez de L 49, M 34, S 12,
+    // XL 55, XXL 51. Tiene que coincidir con buildWhere, que filtra por variante.
     if (filters.disponibilidad === 'stock') {
-      conditions.push(EXISTE_STOCK);
+      conditions.push(`EXISTS (
+        SELECT 1 FROM inventory_items si
+        WHERE si."variantId" = pv.id AND si.quantity > 0
+      )`);
     } else if (filters.disponibilidad === 'encargo') {
-      conditions.push(`NOT ${EXISTE_STOCK}`);
+      // Por encargo sigue siendo a nivel producto: no hay stock de ningun talle.
+      conditions.push(`NOT EXISTS (
+        SELECT 1 FROM product_variants sv
+        JOIN inventory_items si ON si."variantId" = sv.id
+        WHERE sv."productId" = p.id AND si.quantity > 0
+      )`);
     }
     // El precio se mide sobre la MISMA variante, igual que en el listado: que
     // exista una variante dentro del rango, no dos que lo cumplan por separado.
