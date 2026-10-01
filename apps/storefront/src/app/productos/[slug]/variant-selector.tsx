@@ -153,7 +153,108 @@ export function VariantSelector({
     [images],
   );
 
-  const totalCents = activeVariant ? activeVariant.priceCents + customizationValue.extraCents : undefined;
+  // ---------------------------------------------------------------------------
+  // Talles: elección por modalidad y cantidad por talle.
+  //
+  // El talle es la única opción que se compra de a varios a la vez (dos M y un
+  // L). Las demás (manga, color) siguen siendo de a una: son el producto, no la
+  // cantidad.
+  // ---------------------------------------------------------------------------
+  const sizeOption = product.options.find((o) => normalizeName(o.name).includes('talle'));
+  const otrasOpciones = useMemo(
+    () => product.options.filter((o) => o.id !== sizeOption?.id),
+    [product.options, sizeOption],
+  );
+
+  const [modalidadElegida, setModalidadElegida] = useState<'stock' | 'encargo' | null>(null);
+  const [cantidades, setCantidades] = useState<Record<string, number>>({});
+
+  /**
+   * Qué se puede hacer con cada talle, ya combinado con las otras opciones
+   * elegidas (manga larga M puede estar agotada y la corta no).
+   *
+   * Un talle CON stock no se ofrece por encargo a propósito. Si se ofreciera, el
+   * cliente elegiría "por encargo", pagaría una seña y esperaría veinte días por
+   * algo que está en el depósito — y además el servidor lo resolvería como
+   * entrega inmediata, así que terminaría pagando un total distinto del que vio.
+   */
+  const talles = useMemo(() => {
+    if (!sizeOption) return [];
+    return sizeOption.values.map((value) => {
+      const ids = [
+        ...otrasOpciones.map((o) => selected[o.id]).filter((id): id is string => !!id),
+        value.id,
+      ];
+      const variant =
+        ids.length === product.options.length ? variantByKey.get(combinationKey(ids)) : undefined;
+      const available = variant?.inventory.available ?? 0;
+      const allowPreorder = variant?.inventory.allowPreorder ?? false;
+      return {
+        value,
+        variant,
+        available,
+        enStock: product.fulfillmentMode !== 'PREORDER' && available > 0,
+        porEncargo: product.fulfillmentMode !== 'IN_STOCK' && allowPreorder && available === 0,
+      };
+    });
+  }, [sizeOption, otrasOpciones, selected, variantByKey, product.options.length, product.fulfillmentMode]);
+
+  const ofreceStock = talles.some((t) => t.enStock);
+  const ofreceEncargo = talles.some((t) => t.porEncargo);
+  // Con una sola modalidad posible no hay nada que elegir: el selector sobra.
+  const hayQueElegirModalidad = ofreceStock && ofreceEncargo;
+  const modalidad = modalidadElegida ?? (ofreceStock ? 'stock' : 'encargo');
+
+  const disponibleEnModalidad = (t: (typeof talles)[number]) =>
+    modalidad === 'stock' ? t.enStock : t.porEncargo;
+
+  function cambiarModalidad(nueva: 'stock' | 'encargo') {
+    setModalidadElegida(nueva);
+    // Las cantidades son de los talles de la otra modalidad: arrastrarlas haría
+    // que el botón diga "Agregar 3" sin que se vea ninguno elegido.
+    setCantidades({});
+    setAddError(null);
+  }
+
+  /**
+   * Cuántas unidades hay pedidas de un talle, nunca más de las que se pueden
+   * llevar. El tope se recalcula al cambiar de manga o de modalidad: si alguien
+   * pide tres M de manga corta y después pasa a larga, donde queda una, lo
+   * elegido se recorta solo en vez de que el servidor rechace el pedido al final.
+   */
+  const topeDe = (t: (typeof talles)[number]) => (modalidad === 'stock' ? t.available : 99);
+  const cantidadDe = (t: (typeof talles)[number]) =>
+    Math.min(cantidades[t.value.id] ?? 0, topeDe(t));
+
+  const lineas = useMemo(
+    () =>
+      talles
+        .filter((t) => disponibleEnModalidad(t) && t.variant && cantidadDe(t) > 0)
+        .map((t) => ({ talle: t, cantidad: cantidadDe(t) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [talles, cantidades, modalidad],
+  );
+
+  const unidadesElegidas = lineas.reduce((n, l) => n + l.cantidad, 0);
+
+  /**
+   * La variante de la que se muestra el precio. Con talles, es la del primer
+   * talle elegido, y si todavía no eligió ninguno, la del primero que podría
+   * elegir: así la ficha muestra un precio desde que se abre.
+   */
+  const variantePrecio = sizeOption
+    ? (lineas[0]?.talle.variant ??
+      talles.find((t) => disponibleEnModalidad(t))?.variant ??
+      product.variants[0])
+    : activeVariant;
+
+  const totalCents = variantePrecio ? variantePrecio.priceCents + customizationValue.extraCents : undefined;
+
+  /** Lo que suma todo lo elegido, para no obligar a multiplicar de cabeza. */
+  const totalPedidoCents = lineas.reduce(
+    (suma, l) => suma + (l.talle.variant!.priceCents + customizationValue.extraCents) * l.cantidad,
+    0,
+  );
 
   /**
    * Precio promocional por pagar sin pasarela. Se calcula sobre el total que se
@@ -169,28 +270,44 @@ export function VariantSelector({
     return mejor ? { ...mejor, baseCents: totalCents } : null;
   }, [totalCents, settings]);
 
-  const canBuy = !!activeVariant && activeVariant.inventory.available > 0 && customizationValue.valid;
-  const canPreorder = !!activeVariant && activeVariant.inventory.allowPreorder && customizationValue.valid;
-  const isPreorderMode = activeVariant && activeVariant.inventory.available === 0 && activeVariant.inventory.allowPreorder;
+  // Con talles manda lo elegido en la grilla; sin talles, la variante única.
+  const canBuy = sizeOption
+    ? modalidad === 'stock' && unidadesElegidas > 0 && customizationValue.valid
+    : !!activeVariant && activeVariant.inventory.available > 0 && customizationValue.valid;
+  const canPreorder = sizeOption
+    ? modalidad === 'encargo' && unidadesElegidas > 0 && customizationValue.valid
+    : !!activeVariant && activeVariant.inventory.allowPreorder && customizationValue.valid;
+  const isPreorderMode = sizeOption
+    ? modalidad === 'encargo'
+    : activeVariant && activeVariant.inventory.available === 0 && activeVariant.inventory.allowPreorder;
 
   async function handleAddToCart() {
-    if (!activeVariant) return;
+    // Con talles se agregan todas las líneas elegidas; sin talles, la variante única.
+    const aAgregar = sizeOption
+      ? lineas.map((l) => ({ variantId: l.talle.variant!.id, quantity: l.cantidad }))
+      : activeVariant
+        ? [{ variantId: activeVariant.id, quantity: 1 }]
+        : [];
+    if (aAgregar.length === 0) return;
+
     setAddError(null);
     setIsAdding(true);
     try {
       const hasCustomization = !!customizationValue.playerName || customizationValue.playerNumber !== undefined || customizationValue.patchIds.length > 0;
-      await addItem({
-        variantId: activeVariant.id,
-        quantity: 1,
-        customization: hasCustomization
-          ? {
-              playerName: customizationValue.playerName,
-              playerNumber: customizationValue.playerNumber,
-              fontId: product.customization?.font?.id ?? null,
-              patchIds: customizationValue.patchIds,
-            }
-          : undefined,
-      });
+      const customization = hasCustomization
+        ? {
+            playerName: customizationValue.playerName,
+            playerNumber: customizationValue.playerNumber,
+            fontId: product.customization?.font?.id ?? null,
+            patchIds: customizationValue.patchIds,
+          }
+        : undefined;
+
+      // De a uno y en orden: el carrito reserva stock, y mandarlos en paralelo
+      // haría competir a dos reservas por las mismas unidades.
+      for (const linea of aAgregar) {
+        await addItem({ ...linea, customization });
+      }
       router.push('/carrito');
     } catch {
       setAddError('No pudimos agregarlo al carrito. Probá de nuevo.');
@@ -315,8 +432,160 @@ export function VariantSelector({
 
         <AccionesProducto product={product} />
 
-        {/* Options (Size, Version, etc) */}
-        {product.options.map((option) => (
+        {/* Modalidad: sólo si el producto realmente se puede comprar de las dos formas. */}
+        {hayQueElegirModalidad && (
+          <div className="mt-6">
+            <span className="mb-2 block text-sm font-semibold text-foreground">
+              ¿Cómo lo querés?
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => cambiarModalidad('stock')}
+                className={
+                  'rounded-lg border p-3 text-left transition-all ' +
+                  (modalidad === 'stock'
+                    ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500'
+                    : 'border-input bg-background hover:bg-secondary')
+                }
+              >
+                <span className="flex items-center gap-1.5 text-sm font-bold text-foreground">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Stock inmediato
+                </span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Lo tenemos acá. Pagás el total y se envía.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => cambiarModalidad('encargo')}
+                className={
+                  'rounded-lg border p-3 text-left transition-all ' +
+                  (modalidad === 'encargo'
+                    ? 'border-accent bg-accent/10 ring-1 ring-accent'
+                    : 'border-input bg-background hover:bg-secondary')
+                }
+              >
+                <span className="flex items-center gap-1.5 text-sm font-bold text-foreground">
+                  <RefreshCw className="h-4 w-4 text-accent" />
+                  Por encargo
+                </span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Se pide a China. Seña del 50% ahora.
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Talles: cantidad por talle, según la modalidad elegida. */}
+        {sizeOption && (
+          <div className="mt-6">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">{sizeOption.name}</span>
+              <button
+                type="button"
+                onClick={() => setSizeGuideOpen(true)}
+                className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+              >
+                <Ruler className="h-3.5 w-3.5" /> Tabla de medidas
+              </button>
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              {modalidad === 'stock'
+                ? 'Elegí cuántas unidades querés de cada talle. Los tachados no tienen stock.'
+                : 'Elegí cuántas unidades querés de cada talle. Los tachados ya los tenemos acá: están en “Stock inmediato”.'}
+            </p>
+
+            <div className="space-y-2">
+              {talles.map((t) => {
+                const disponible = disponibleEnModalidad(t);
+                // Con stock no se puede pedir más de lo que hay; por encargo no hay tope.
+                const tope = topeDe(t);
+                const cantidad = cantidadDe(t);
+                return (
+                  <div
+                    key={t.value.id}
+                    className={
+                      'flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ' +
+                      (!disponible
+                        ? 'border-dashed border-input/60 bg-muted/30'
+                        : cantidad > 0
+                          ? 'border-primary bg-primary/5'
+                          : 'border-input bg-background')
+                    }
+                  >
+                    <div className="min-w-0">
+                      <span
+                        className={
+                          'text-sm font-semibold ' +
+                          (disponible ? 'text-foreground' : 'text-muted-foreground/60 line-through')
+                        }
+                      >
+                        {t.value.value}
+                      </span>
+                      {disponible && modalidad === 'stock' && t.available <= 2 && (
+                        <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                          {t.available === 1 ? '¡Última unidad!' : `¡Quedan ${t.available}!`}
+                        </span>
+                      )}
+                      {!disponible && (
+                        <span className="ml-2 text-[11px] text-muted-foreground">
+                          {modalidad === 'stock' ? 'sin stock' : 'disponible con entrega inmediata'}
+                        </span>
+                      )}
+                    </div>
+
+                    {disponible && (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Quitar una unidad de ${t.value.value}`}
+                          disabled={cantidad === 0}
+                          onClick={() =>
+                            setCantidades((c) => ({ ...c, [t.value.id]: Math.max(0, cantidad - 1) }))
+                          }
+                          className="h-8 w-8 rounded-md border border-input text-base font-bold text-foreground disabled:opacity-30 hover:bg-secondary"
+                        >
+                          −
+                        </button>
+                        <span className="w-8 text-center text-sm font-bold tabular-nums">{cantidad}</span>
+                        <button
+                          type="button"
+                          aria-label={`Agregar una unidad de ${t.value.value}`}
+                          disabled={cantidad >= tope}
+                          onClick={() =>
+                            setCantidades((c) => ({ ...c, [t.value.id]: Math.min(tope, cantidad + 1) }))
+                          }
+                          className="h-8 w-8 rounded-md border border-input text-base font-bold text-foreground disabled:opacity-30 hover:bg-secondary"
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {unidadesElegidas > 0 && (
+              <p className="mt-3 text-sm font-semibold text-foreground">
+                {unidadesElegidas} {unidadesElegidas === 1 ? 'unidad' : 'unidades'} ·{' '}
+                {formatCentsAsArs(totalPedidoCents)}
+              </p>
+            )}
+            {unidadesElegidas > 1 && customizationValue.extraCents > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                La personalización que elijas se aplica a las {unidadesElegidas} unidades.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Otras opciones (manga, color…): siguen siendo de a una. */}
+        {otrasOpciones.map((option) => (
           <div key={option.id} className="mt-6">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-semibold text-foreground">{option.name}</span>
@@ -366,10 +635,13 @@ export function VariantSelector({
           </div>
         ))}
 
-        {/* Availability Badge */}
-        <div className="mt-6">
-          <AvailabilityBadge product={product} variant={activeVariant} />
-        </div>
+        {/* Availability Badge. Con talles la modalidad ya está dicha arriba y el
+            cartel sólo repetiría; se muestra únicamente si no hay nada elegido. */}
+        {!sizeOption && (
+          <div className="mt-6">
+            <AvailabilityBadge product={product} variant={activeVariant} />
+          </div>
+        )}
 
         {/* Preorder Callout Banner */}
         {isPreorderMode && (
@@ -396,14 +668,24 @@ export function VariantSelector({
           {isAdding
             ? 'Agregando…'
             : canBuy
-              ? 'Agregar al carrito'
+              ? sizeOption && unidadesElegidas > 1
+                ? `Agregar ${unidadesElegidas} al carrito`
+                : 'Agregar al carrito'
               : canPreorder
-                ? 'Pedir por encargo (Seña 50%)'
-                : activeVariant
-                  ? 'Sin stock disponible'
-                  : hasFullSelection
-                    ? 'Opción no disponible'
-                    : `Elegí ${optionsPrompt(product.options)}`}
+                ? sizeOption && unidadesElegidas > 1
+                  ? `Pedir ${unidadesElegidas} por encargo (Seña 50%)`
+                  : 'Pedir por encargo (Seña 50%)'
+                : sizeOption
+                  ? talles.some((t) => disponibleEnModalidad(t))
+                    ? 'Elegí al menos un talle'
+                    : modalidad === 'stock'
+                      ? 'Sin stock disponible'
+                      : 'No disponible por encargo'
+                  : activeVariant
+                    ? 'Sin stock disponible'
+                    : hasFullSelection
+                      ? 'Opción no disponible'
+                      : `Elegí ${optionsPrompt(product.options)}`}
         </button>
 
         {addError && <p className="mt-2 text-sm text-destructive">{addError}</p>}
