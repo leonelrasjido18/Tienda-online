@@ -23,23 +23,15 @@ function Stars({ value, size = 16 }: { value: number; size?: number }) {
 }
 
 export function ProductReviews({ productId, initial }: { productId: string; initial: ReviewSummaryDto }) {
-  const [summary, setSummary] = useState<ReviewSummaryDto>(initial);
+  // Las reseñas se publican recién cuando se aprueban en el panel, así que enviar
+  // una no cambia este resumen: no necesita estado.
+  const summary = initial;
   const [showForm, setShowForm] = useState(false);
   const [rating, setRating] = useState(5);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
-
-  async function refresh(slug?: string) {
-    if (!slug) return;
-    try {
-      const fresh = await clientFetch<ReviewSummaryDto>(`/catalog/products/${slug}/reviews`);
-      setSummary(fresh);
-    } catch {
-      // No pasa nada: se conserva lo que ya estaba.
-    }
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

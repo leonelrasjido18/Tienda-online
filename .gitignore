@@ -59,6 +59,13 @@ venv/
 __pycache__/
 *.pyc
 
+# Carga asistida del catálogo: maneja un navegador real con Playwright contra el
+# panel y lee las fotos del proveedor desde una ruta del disco local. No es parte
+# de la aplicación y no se despliega, así que no se versiona. Queda en el disco.
+productos.py
+requiriments.txt
+readme1.md
+
 # Perfil de navegador de Playwright. Estaba versionado: 1586 archivos, e
 # incluía "Login Data", "Cookies", "Web Data" e "History" — o sea contraseñas
 # guardadas, cookies de sesión y autocompletado.
