@@ -77,6 +77,10 @@ export function ProductFilters({
     const params = new URLSearchParams();
     const q = searchParams.get('q');
     if (q) params.set('q', q);
+    // La pestaña no es un filtro más: limpiar filtros dentro de "Stock
+    // inmediato" tiene que dejarte en esa pestaña, no en el catálogo completo.
+    const disponibilidad = searchParams.get('disponibilidad');
+    if (disponibilidad) params.set('disponibilidad', disponibilidad);
     router.push(`${pathname}?${params.toString()}`);
     if (onApplyMobile) onApplyMobile();
   }

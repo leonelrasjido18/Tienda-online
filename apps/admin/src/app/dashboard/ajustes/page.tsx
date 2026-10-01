@@ -5,6 +5,8 @@ import type { StoreSettingsDto, UpdateStoreSettingsInput } from '@tienda/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
+import { DescuentoMedioPago } from './descuento-medio-pago';
+
 import { ApiError } from '@/lib/api';
 import { useApi } from '@/lib/use-api';
 
@@ -47,6 +49,12 @@ function SettingsTabs({ initial }: { initial: StoreSettingsDto }) {
   const [bankTransferInstructions, setBankTransferInstructions] = useState(initial.bankTransferInstructions ?? '');
   const [enableCardPayment, setEnableCardPayment] = useState(initial.enableCardPayment);
   const [enableCash, setEnableCash] = useState(initial.enableCash);
+  const [bankTransferDiscount, setBankTransferDiscount] = useState(
+    initial.bankTransferDiscount ?? { mode: 'percentage' as const, value: 0 },
+  );
+  const [cashDiscount, setCashDiscount] = useState(
+    initial.cashDiscount ?? { mode: 'percentage' as const, value: 0 },
+  );
 
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -69,6 +77,8 @@ function SettingsTabs({ initial }: { initial: StoreSettingsDto }) {
         enableBankTransfer,
         enableCardPayment,
         enableCash,
+        bankTransferDiscount,
+        cashDiscount,
       };
       return api<StoreSettingsDto>('/admin/settings', { method: 'PATCH', body: JSON.stringify(body) });
     },
@@ -185,6 +195,13 @@ function SettingsTabs({ initial }: { initial: StoreSettingsDto }) {
                   <p className="text-xs text-muted-foreground">Se le muestran al cliente cuando elige transferencia.</p>
                 </div>
               )}
+              {enableBankTransfer && (
+                <DescuentoMedioPago
+                  label="transferencia"
+                  value={bankTransferDiscount}
+                  onChange={setBankTransferDiscount}
+                />
+              )}
             </div>
 
             <label className="flex items-center gap-2 rounded-md border border-border p-3 text-sm font-medium">
@@ -195,13 +212,18 @@ function SettingsTabs({ initial }: { initial: StoreSettingsDto }) {
               </span>
             </label>
 
-            <label className="flex items-center gap-2 rounded-md border border-border p-3 text-sm font-medium">
-              <input type="checkbox" checked={enableCash} onChange={(e) => setEnableCash(e.target.checked)} />
-              <span>
-                Efectivo
-                <span className="block text-xs font-normal text-muted-foreground">El cliente paga al retirar en el local.</span>
-              </span>
-            </label>
+            <div className="space-y-3 rounded-md border border-border p-3">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={enableCash} onChange={(e) => setEnableCash(e.target.checked)} />
+                <span>
+                  Efectivo
+                  <span className="block text-xs font-normal text-muted-foreground">El cliente paga al retirar en el local.</span>
+                </span>
+              </label>
+              {enableCash && (
+                <DescuentoMedioPago label="efectivo" value={cashDiscount} onChange={setCashDiscount} />
+              )}
+            </div>
             {save}
           </>
         )}

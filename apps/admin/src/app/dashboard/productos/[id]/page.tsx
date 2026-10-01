@@ -9,6 +9,8 @@ import { ProductCustomizationEditor } from './product-customization-editor';
 import { ProductGeneralForm } from './product-general-form';
 import { ProductImagesManager } from './product-images-manager';
 import { ProductOptionsEditor } from './product-options-editor';
+import { ProductSaveBusProvider } from './product-save-bus';
+import { ProductSaveHeader } from './product-save-header';
 import { ProductVariantsGrid } from './product-variants-grid';
 
 export default function ProductEditorPage() {
@@ -26,10 +28,14 @@ export default function ProductEditorPage() {
   }
 
   return (
+    <ProductSaveBusProvider>
     <div className="mx-auto max-w-4xl space-y-8 pb-16">
-      <div>
-        <h1 className="text-xl font-semibold">{product.name}</h1>
-        <p className="text-sm text-muted-foreground">/{product.slug}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold">{product.name}</h1>
+          <p className="text-sm text-muted-foreground">/{product.slug}</p>
+        </div>
+        <ProductSaveHeader productId={productId} />
       </div>
 
       <section className="rounded-lg border border-border bg-background p-6">
@@ -70,5 +76,6 @@ export default function ProductEditorPage() {
         />
       </section>
     </div>
+    </ProductSaveBusProvider>
   );
 }

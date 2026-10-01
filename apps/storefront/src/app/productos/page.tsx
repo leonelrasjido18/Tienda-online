@@ -287,6 +287,9 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
                   size: query.size,
                   minPrice: query.minPrice,
                   maxPrice: query.maxPrice,
+                  // Sin esto, pasar a la página 2 salía de la pestaña elegida y
+                  // devolvía el catálogo completo, que es casi todo por encargo.
+                  disponibilidad: query.disponibilidad,
                   sort: query.sort === 'newest' ? undefined : query.sort,
                   page: page === 1 ? undefined : String(page),
                 });

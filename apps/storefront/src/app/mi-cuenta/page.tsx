@@ -17,8 +17,10 @@ import {
   Truck,
   PackageCheck,
   Ship,
-  FileCheck
+  FileCheck,
+  MailWarning
 } from 'lucide-react';
+import Link from 'next/link';
 import { Button, Input, Label, Card, CardContent } from '@tienda/ui';
 import { clientFetch } from '@/lib/client-api';
 import { formatCentsAsArs } from '@tienda/shared';
@@ -39,6 +41,7 @@ interface CustomerProfile {
   email: string;
   name: string | null;
   phone: string | null;
+  emailVerifiedAt: string | null;
   defaultPickupInStore: boolean;
   defaultStreet: string | null;
   defaultNumber: string | null;
@@ -324,6 +327,23 @@ export default function MyAccountPage() {
           Cerrar Sesión
         </button>
       </div>
+
+      {/* Verificar el email no bloquea comprar; el aviso es la única vía de vuelta
+          para quien perdió el correo con el código. */}
+      {customer && customer.emailVerifiedAt === null && (
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <MailWarning className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" />
+          <p className="flex-1 text-sm text-foreground">
+            Tu email todavía no está verificado. Verificalo para que no se nos pierdan los avisos de tus pedidos.
+          </p>
+          <Link
+            href={`/verificar?email=${encodeURIComponent(customer.email)}`}
+            className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-amber-700"
+          >
+            Verificar ahora
+          </Link>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Barra Lateral Navegación */}

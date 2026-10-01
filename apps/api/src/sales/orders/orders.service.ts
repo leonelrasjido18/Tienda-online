@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, forwardRef } from '@nestjs/common';
 import {
   formatCentsAsArs,
   formatOrderNumber,
@@ -10,8 +10,9 @@ import {
   type PaymentStatus as PaymentStatusValue,
   canTransitionOrderFinancial,
   canTransitionPayment,
+  OFFLINE_PAYMENT_METHODS,
 } from '@tienda/shared';
-import type { Order, OrderEvent, OrderItem, OrderItemCustomization, Payment, Prisma, Shipment } from '@prisma/client';
+import type { Order, Payment, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../notifications/mail.service';
@@ -21,18 +22,36 @@ import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { MetaConversionsService } from '../analytics/meta-conversions.service';
 
 const ORDER_DETAIL_INCLUDE = {
-  items: { include: { customization: true } },
+  items: {
+    include: {
+      customization: true,
+      // Para enlazar a la ficha del producto y para poder decir "Talle: S" en
+      // vez de sólo "S": `optionsLabel` guarda los valores sin su etiqueta.
+      variant: {
+        include: {
+          product: { select: { slug: true } },
+          optionValues: { include: { value: { include: { option: { select: { name: true, position: true } } } } } },
+        },
+      },
+    },
+  },
   events: { orderBy: { createdAt: 'asc' as const } },
   payments: { orderBy: { createdAt: 'asc' as const } },
   shipment: true,
 } satisfies Prisma.OrderInclude;
 
-type OrderWithRelations = Order & {
-  items: (OrderItem & { customization: OrderItemCustomization | null })[];
-  events: OrderEvent[];
-  payments: Payment[];
-  shipment: Shipment | null;
-};
+type OrderWithRelations = Prisma.OrderGetPayload<{ include: typeof ORDER_DETAIL_INCLUDE }>;
+
+/**
+ * Nombres de tipografías y parches, resueltos aparte. La personalización guarda
+ * `fontId` y `patchIds` (Json), que no sirven ni en un mail ni en el panel.
+ */
+export interface CustomizationNames {
+  fonts: Map<string, string>;
+  patches: Map<string, string>;
+}
+
+const SIN_NOMBRES: CustomizationNames = { fonts: new Map(), patches: new Map() };
 
 export interface AdminOrderListQuery {
   financialStatus?: OrderFinancialStatus;
@@ -43,6 +62,8 @@ export interface AdminOrderListQuery {
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly stock: StockReservationService,
@@ -84,7 +105,39 @@ export class OrdersService {
     if (!order) {
       throw new NotFoundException('El pedido no existe');
     }
-    return this.toDetailDto(order);
+    return this.toDetailDto(order, await this.resolveCustomizationNames(order));
+  }
+
+  /**
+   * Traduce `fontId` y `patchIds` a nombres legibles, en dos consultas para todo
+   * el pedido en vez de una por ítem.
+   */
+  async resolveCustomizationNames(order: OrderWithRelations): Promise<CustomizationNames> {
+    const fontIds = new Set<string>();
+    const patchIds = new Set<string>();
+    for (const item of order.items) {
+      if (!item.customization) continue;
+      if (item.customization.fontId) fontIds.add(item.customization.fontId);
+      // `patchIds` es Json: puede venir null, o con basura si alguien lo editó a mano.
+      const brutos = item.customization.patchIds;
+      if (Array.isArray(brutos)) {
+        for (const id of brutos) if (typeof id === 'string') patchIds.add(id);
+      }
+    }
+    if (!fontIds.size && !patchIds.size) return SIN_NOMBRES;
+
+    const [fonts, patches] = await Promise.all([
+      fontIds.size
+        ? this.prisma.leagueFont.findMany({ where: { id: { in: [...fontIds] } }, select: { id: true, name: true } })
+        : Promise.resolve([]),
+      patchIds.size
+        ? this.prisma.patch.findMany({ where: { id: { in: [...patchIds] } }, select: { id: true, name: true } })
+        : Promise.resolve([]),
+    ]);
+    return {
+      fonts: new Map(fonts.map((f) => [f.id, f.name])),
+      patches: new Map(patches.map((p) => [p.id, p.name])),
+    };
   }
 
   async publicDetail(token: string): Promise<PublicOrderDetailDto> {
@@ -113,20 +166,60 @@ export class OrdersService {
   }
 
   /** Aprobación manual de una transferencia bancaria desde el panel. */
-  async approveBankTransfer(orderId: string, paymentId: string) {
+  /**
+   * Da por cobrado un pago sin pasarela. Vale para transferencia y para
+   * efectivo: los dos los confirma la dueña a mano cuando recibe la plata, y
+   * antes el efectivo no tenía forma de marcarse como pagado.
+   *
+   * Dispara lo mismo que un pago con tarjeta aprobado: confirmación al cliente,
+   * aviso de venta y, si el pedido es por encargo, la asignación al lote.
+   */
+  async approveOfflinePayment(orderId: string, paymentId: string) {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment || payment.orderId !== orderId) {
       throw new NotFoundException('El pago no existe para este pedido');
     }
-    if (payment.provider !== 'bank_transfer') {
-      throw new BadRequestException('Este pago no es una transferencia bancaria');
+    if (!(OFFLINE_PAYMENT_METHODS as readonly string[]).includes(payment.provider)) {
+      throw new BadRequestException(
+        'Este pago se cobra por la pasarela: se confirma solo cuando el proveedor avisa.',
+      );
     }
     if (payment.status === 'APPROVED') {
       return this.detail(orderId);
     }
 
-    await this.applyApprovedPayment(payment.id, { provider: 'bank_transfer' });
+    await this.applyApprovedPayment(payment.id, { provider: payment.provider });
     return this.detail(orderId);
+  }
+
+  /**
+   * Reenvía la confirmación al cliente con el detalle actual del pedido.
+   *
+   * Se exige que el pedido esté cobrado: mandar "confirmamos tu pedido" sobre
+   * uno pendiente o cancelado es justo lo que se corrigió al mover los correos
+   * al momento del pago.
+   */
+  async resendConfirmation(orderId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId }, include: ORDER_DETAIL_INCLUDE });
+    if (!order) {
+      throw new NotFoundException('El pedido no existe');
+    }
+    const cobrado = ['DEPOSIT_PAID', 'AWAITING_BALANCE', 'PAID'].includes(order.financialStatus);
+    if (!cobrado) {
+      throw new BadRequestException(
+        `No se puede reenviar la confirmación de un pedido ${order.financialStatus}: todavía no está cobrado.`,
+      );
+    }
+
+    const detalle = this.toDetailDto(order, await this.resolveCustomizationNames(order));
+    const cobradoCents = order.depositCents ?? order.totalCents;
+    await this.mail.sendOrderConfirmation({ ...detalle, dueTodayCents: cobradoCents });
+
+    await this.prisma.orderEvent.create({
+      data: { orderId, type: 'confirmation_resent', message: `Confirmación reenviada a ${order.contactEmail}` },
+    });
+
+    return { success: true, sentTo: order.contactEmail };
   }
 
   async cancel(orderId: string, reason?: string) {
@@ -442,14 +535,20 @@ export class OrdersService {
     paymentId: string,
     extra: { provider: string; providerPaymentId?: string; rawPayload?: unknown },
   ) {
-    const order = await this.prisma.$transaction(async (tx) => {
+    const resultado = await this.prisma.$transaction(async (tx) => {
       // La comprobación previa al entrar al método no es suficiente: dos
       // webhooks distintos pueden llegar a la vez. Se bloquea la fila antes de
       // decidir la transición para que sólo uno consuma la reserva.
       const [lockedPayment] = await tx.$queryRaw<Payment[]>`
         SELECT * FROM payments WHERE id = ${paymentId} FOR UPDATE
       `;
-      if (!lockedPayment || lockedPayment.status === 'APPROVED' || lockedPayment.status !== 'PENDING') {
+      // Se acepta desde PENDING y tambien desde REJECTED: la pasarela permite
+      // reintentar sobre el mismo pago, y un rechazo previo no puede descartar
+      // la aprobacion posterior.
+      if (!lockedPayment || lockedPayment.status === 'APPROVED') {
+        return null;
+      }
+      if (lockedPayment.status !== 'PENDING' && lockedPayment.status !== 'REJECTED') {
         return null;
       }
 
@@ -473,6 +572,21 @@ export class OrdersService {
         where: { id: payment.orderId },
         include: { items: true },
       });
+
+      // Pago que entra cuando el pedido ya estaba cerrado. El cobro es real y el
+      // pago queda APPROVED, pero el pedido no se revive solo: la reserva se
+      // liberó y ese stock puede haberse vendido, asi que revivirlo a ciegas
+      // sobrevendería. Queda anotado y se avisa al dueño para que resuelva.
+      if (currentOrder.financialStatus === 'EXPIRED' || currentOrder.financialStatus === 'FAILED') {
+        await tx.orderEvent.create({
+          data: {
+            orderId: currentOrder.id,
+            type: 'payment_after_close',
+            message: `Pago aprobado vía ${extra.provider} sobre un pedido ya ${currentOrder.financialStatus}. Requiere revisión manual.`,
+          },
+        });
+        return { order: currentOrder, isBalance: false, cobradoCents: payment.amountCents, pagoTardio: true };
+      }
 
       // El saldo es el SEGUNDO cobro de la misma orden: el stock ya se descontó
       // cuando se aprobó la seña. Volver a consumirlo acá lo restaría dos veces.
@@ -539,24 +653,48 @@ export class OrdersService {
         },
       });
 
-      return updated;
+      return { order: updated, isBalance, cobradoCents: payment.amountCents, pagoTardio: false };
     });
 
-    if (!order) return;
+    if (!resultado) return;
+    const { order, isBalance, cobradoCents, pagoTardio } = resultado;
 
-    const mailContext = {
-      number: order.number,
-      contactName: order.contactName,
-      contactEmail: order.contactEmail,
-      totalCents: order.totalCents,
-      dueTodayCents: order.depositCents ?? order.totalCents,
-      paymentPlan: order.paymentPlan,
-    };
-    await this.mail.sendSaleAlert(mailContext, 'Pago aprobado');
+    // Un cobro sobre un pedido ya cerrado no le manda nada al cliente: hay que
+    // decidir primero si se reactiva el pedido o se devuelve la plata.
+    if (pagoTardio) {
+      this.logger.error(
+        `Pago aprobado sobre el pedido ${formatOrderNumber(order.number)} que estaba ${order.financialStatus}. Revisar a mano.`,
+      );
+      await this.push.broadcast({
+        title: `Revisar pedido ${formatOrderNumber(order.number)}`,
+        body: 'Se aprobó un pago sobre un pedido ya cerrado',
+        url: `/dashboard/pedidos/${order.id}`,
+        orderId: order.id,
+      });
+      return;
+    }
+
+    // El detalle completo (opciones, personalización, envío) se arma una sola vez
+    // y lo comparten los dos mails, así el cliente y el dueño ven lo mismo.
+    const detalle = await this.prisma.order.findUnique({ where: { id: order.id }, include: ORDER_DETAIL_INCLUDE });
+    const mailContext = detalle
+      ? { ...this.toDetailDto(detalle, await this.resolveCustomizationNames(detalle)), dueTodayCents: cobradoCents }
+      : null;
+
+    if (mailContext) {
+      // La confirmación sale con el primer cobro (seña o pago total). Cuando
+      // entra el saldo el cliente ya la recibió: repetirla sería confuso, y para
+      // eso está `sendBalanceRequest`.
+      if (!isBalance) {
+        await this.mail.sendOrderConfirmation(mailContext);
+      }
+      await this.mail.sendSaleAlert(mailContext, isBalance ? 'Saldo cobrado' : 'Pago aprobado');
+    }
     await this.push.broadcast({
       title: `Pago aprobado ${formatOrderNumber(order.number)}`,
       body: order.contactName,
-      url: `/pedidos/${order.id}`,
+      url: `/dashboard/pedidos/${order.id}`,
+      orderId: order.id,
     });
 
     // Purchase a Meta CAPI sólo cuando la compra quedó completa (PAID). event_id =
@@ -587,7 +725,7 @@ export class OrdersService {
     };
   }
 
-  private toDetailDto(order: OrderWithRelations): OrderDetailDto {
+  toDetailDto(order: OrderWithRelations, nombres: CustomizationNames = SIN_NOMBRES): OrderDetailDto {
     return {
       ...this.toSummaryDto(order),
       contactPhone: order.contactPhone,
@@ -607,8 +745,15 @@ export class OrdersService {
       items: order.items.map((item) => ({
         id: item.id,
         productName: item.productName,
+        // El producto puede haberse borrado después de la venta: la variante
+        // queda en null y el ítem conserva el nombre, pero ya no hay ficha.
+        productSlug: item.variant?.product.slug ?? null,
         variantSku: item.variantSku,
         optionsLabel: item.optionsLabel,
+        options: (item.variant?.optionValues ?? [])
+          .slice()
+          .sort((a, b) => a.value.option.position - b.value.option.position)
+          .map((ov) => ({ name: ov.value.option.name, value: ov.value.value })),
         imageUrl: item.imageUrl,
         unitPriceCents: item.unitPriceCents,
         quantity: item.quantity,
@@ -621,6 +766,13 @@ export class OrdersService {
               extraCents: item.customization.extraCents,
               previewImageUrl: item.customization.previewImageUrl,
               productionImageUrl: item.customization.productionImageUrl,
+              fontName: item.customization.fontId ? (nombres.fonts.get(item.customization.fontId) ?? null) : null,
+              patchNames: Array.isArray(item.customization.patchIds)
+                ? item.customization.patchIds
+                    .filter((id): id is string => typeof id === 'string')
+                    .map((id) => nombres.patches.get(id))
+                    .filter((n): n is string => !!n)
+                : [],
             }
           : null,
       })),

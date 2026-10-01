@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 
 import { useAuth } from '@/lib/auth-context';
+import { NuevosPedidosToaster } from './nuevos-pedidos-toaster';
 import { PushSubscribeButton } from './push-subscribe-button';
 
 interface NavItem {
@@ -35,6 +36,7 @@ const NAV: NavEntry[] = [
     label: 'Catálogo',
     items: [
       { href: '/dashboard/productos', label: 'Productos' },
+      { href: '/dashboard/precios', label: 'Ajuste de precios' },
       { href: '/dashboard/ligas', label: 'Ligas' },
       { href: '/dashboard/equipos', label: 'Equipos' },
       { href: '/dashboard/temporadas', label: 'Temporadas' },
@@ -50,6 +52,7 @@ const NAV: NavEntry[] = [
     items: [
       { href: '/dashboard/preguntas', label: 'FAQs' },
       { href: '/dashboard/resenas', label: 'Reseñas' },
+      { href: '/dashboard/correos', label: 'Correos' },
     ],
   },
   { href: '/dashboard/cupones', label: 'Cupones' },
@@ -170,6 +173,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
         </header>
         <main className="flex-1 overflow-y-auto bg-muted/30 p-4 md:p-6">{children}</main>
       </div>
+
+      <NuevosPedidosToaster />
     </div>
   );
 }

@@ -39,11 +39,22 @@ export class AdminOrdersController {
     return this.orders.detail(id);
   }
 
-  // Dar por cobrada una transferencia es mover plata: sólo la dueña.
+  // Dar por cobrado un pago en mano (transferencia o efectivo) es mover plata:
+  // sólo la dueña. La ruta conserva el nombre para no romper el panel viejo.
   @Roles('OWNER')
   @Post(':id/payments/:paymentId/approve-transfer')
   approveTransfer(@Param('id') id: string, @Param('paymentId') paymentId: string) {
-    return this.orders.approveBankTransfer(id, paymentId);
+    return this.orders.approveOfflinePayment(id, paymentId);
+  }
+
+  /**
+   * Vuelve a mandar la confirmación al cliente. Sirve cuando el correo no salió
+   * (un SMTP caído, o un pedido corregido a mano) o cuando el cliente lo perdió.
+   */
+  @Roles('OWNER')
+  @Post(':id/resend-confirmation')
+  resendConfirmation(@Param('id') id: string) {
+    return this.orders.resendConfirmation(id);
   }
 
   @Roles('OWNER')

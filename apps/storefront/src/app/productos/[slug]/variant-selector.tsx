@@ -1,6 +1,12 @@
 'use client';
 
-import { formatCentsAsArs, type ProductDetailDto } from '@tienda/shared';
+import {
+  bestPaymentDiscount,
+  formatCentsAsArs,
+  PAYMENT_METHOD_LABELS,
+  type ProductDetailDto,
+  type StoreSettingsDto,
+} from '@tienda/shared';
 import { buttonVariants, Sheet, SheetContent, SheetHeader, SheetTitle } from '@tienda/ui';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
@@ -31,7 +37,13 @@ function optionsPrompt(options: ProductDetailDto['options']): string {
   return `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]!}`;
 }
 
-export function VariantSelector({ product }: { product: ProductDetailDto }) {
+export function VariantSelector({
+  product,
+  settings,
+}: {
+  product: ProductDetailDto;
+  settings: StoreSettingsDto;
+}) {
   const router = useRouter();
   const { addItem } = useCart();
   const [isAdding, setIsAdding] = useState(false);
@@ -104,12 +116,57 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
   // Valores de opción que mandan sobre la foto principal (manga, color…). Sirve
   // para saber cuándo hay que soltar la miniatura elegida a mano: si no, el
   // cliente toca una miniatura y a partir de ahí cambiar de manga no hace nada.
+  /**
+   * Valores que no se pueden comprar con lo que hay elegido ahora.
+   *
+   * Se mira contra la selección de las DEMÁS opciones: si elegiste manga larga,
+   * el talle M puede estar agotado en larga y disponible en corta, y tacharlo
+   * siempre sería mentira. Un producto por encargo no tacha nada, porque sus
+   * variantes admiten preventa.
+   */
+  const valoresSinStock = useMemo(() => {
+    const fuera = new Set<string>();
+    for (const option of product.options) {
+      for (const value of option.values) {
+        const candidatas = product.variants.filter((variant) => {
+          if (!variant.optionValueIds.includes(value.id)) return false;
+          return product.options.every(
+            (otra) =>
+              otra.id === option.id ||
+              !selected[otra.id] ||
+              variant.optionValueIds.includes(selected[otra.id] as string),
+          );
+        });
+        const comprable = candidatas.some(
+          (variant) => variant.inventory.available > 0 || variant.inventory.allowPreorder,
+        );
+        if (!comprable) fuera.add(value.id);
+      }
+    }
+    return fuera;
+  }, [product, selected]);
+
   const optionValueIdsWithImage = useMemo(
     () => new Set(images.map((img) => img.optionValueId).filter((id): id is string => !!id)),
     [images],
   );
 
   const totalCents = activeVariant ? activeVariant.priceCents + customizationValue.extraCents : undefined;
+
+  /**
+   * Precio promocional por pagar sin pasarela. Se calcula sobre el total que se
+   * está mostrando (incluida la personalización), que es lo que el cliente va a
+   * pagar de verdad: anunciarlo sobre el precio base sería prometer de menos.
+   */
+  const promo = useMemo(() => {
+    if (totalCents === undefined) return null;
+    const mejor = bestPaymentDiscount(totalCents, {
+      bank_transfer: settings.bankTransferDiscount,
+      cash: settings.cashDiscount,
+    });
+    return mejor ? { ...mejor, baseCents: totalCents } : null;
+  }, [totalCents, settings]);
+
   const canBuy = !!activeVariant && activeVariant.inventory.available > 0 && customizationValue.valid;
   const canPreorder = !!activeVariant && activeVariant.inventory.allowPreorder && customizationValue.valid;
   const isPreorderMode = activeVariant && activeVariant.inventory.available === 0 && activeVariant.inventory.allowPreorder;
@@ -227,6 +284,27 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
           )}
         </div>
 
+        {promo && (
+          <div className="mt-3 rounded-lg border border-accent/40 bg-accent/10 p-3">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              {/* Tachado en diagonal, de arriba hacia abajo: se distingue del
+                  line-through fino y lee como precio "de antes". */}
+              <span className="relative text-lg text-muted-foreground">
+                {formatCentsAsArs(promo.baseCents)}
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom_right,transparent_46%,currentColor_46%,currentColor_54%,transparent_54%)]"
+                />
+              </span>
+              <span className="text-2xl font-extrabold text-accent">{formatCentsAsArs(promo.finalCents)}</span>
+            </div>
+            <p className="mt-1 text-sm font-medium text-foreground">
+              Pagando con {PAYMENT_METHOD_LABELS[promo.method].toLowerCase()} ahorrás{' '}
+              {formatCentsAsArs(promo.discountCents)}
+            </p>
+          </div>
+        )}
+
         {customizationValue.extraCents > 0 && activeVariant && (
           <p className="mt-1 text-xs text-muted-foreground">
             {formatCentsAsArs(activeVariant.priceCents)} base + {formatCentsAsArs(customizationValue.extraCents)} de personalización
@@ -252,10 +330,14 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
             <div className="flex flex-wrap gap-2">
               {option.values.map((value) => {
                 const active = selected[option.id] === value.id;
+                const agotado = valoresSinStock.has(value.id);
                 return (
                   <button
                     key={value.id}
                     type="button"
+                    // Se deja clickeable a propósito: al elegirlo, el cartel de
+                    // abajo explica por qué no se puede comprar.
+                    title={agotado ? `${value.value} — sin stock` : undefined}
                     onClick={() => {
                       setSelected((s) => ({ ...s, [option.id]: value.id }));
                       // Solo para las opciones que tienen foto propia: cambiar de
@@ -266,10 +348,13 @@ export function VariantSelector({ product }: { product: ProductDetailDto }) {
                       'rounded-lg border px-4 py-2 text-sm font-medium transition-all ' +
                       (active
                         ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                        : 'border-input bg-background text-foreground hover:bg-secondary')
+                        : agotado
+                          ? 'border-dashed border-input/60 bg-muted/40 text-muted-foreground/60 line-through hover:bg-muted/60'
+                          : 'border-input bg-background text-foreground hover:bg-secondary')
                     }
                   >
                     {value.value}
+                    {agotado && <span className="sr-only"> (sin stock)</span>}
                   </button>
                 );
               })}

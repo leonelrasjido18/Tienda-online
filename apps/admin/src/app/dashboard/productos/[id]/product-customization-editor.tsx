@@ -72,8 +72,11 @@ export function ProductCustomizationEditor({
   const [maxNameLength, setMaxNameLength] = useState(c?.maxNameLength ?? 12);
   const [minNumber, setMinNumber] = useState(c?.minNumber ?? 1);
   const [maxNumber, setMaxNumber] = useState(c?.maxNumber ?? 99);
-  const [nameExtraText, setNameExtraText] = useState(((c?.nameExtraCents ?? 0) / 100).toString());
-  const [numberExtraText, setNumberExtraText] = useState(((c?.numberExtraCents ?? 0) / 100).toString());
+  // Un único importe: nombre y dorsal se cobran juntos. En la base siguen los
+  // dos campos, así que se muestra la suma y se guarda entera en el primero.
+  const [personalizacionText, setPersonalizacionText] = useState(
+    (((c?.nameExtraCents ?? 0) + (c?.numberExtraCents ?? 0)) / 100).toString(),
+  );
   const [fontId, setFontId] = useState<string | null>(c?.font?.id ?? null);
   const [fillColor, setFillColor] = useState(c?.fillColor ?? '#FFFFFF');
   const [strokeEnabled, setStrokeEnabled] = useState((c?.strokeWidthPx ?? 0) > 0);
@@ -98,8 +101,8 @@ export function ProductCustomizationEditor({
       let nameExtraCents: number;
       let numberExtraCents: number;
       try {
-        nameExtraCents = parseArsToCents(nameExtraText);
-        numberExtraCents = parseArsToCents(numberExtraText);
+        nameExtraCents = parseArsToCents(personalizacionText);
+        numberExtraCents = 0;
       } catch {
         throw new Error('invalid-price');
       }
@@ -425,9 +428,18 @@ export function ProductCustomizationEditor({
                 onChange={(e) => setMaxNameLength(Number(e.target.value))}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="nameExtra">Costo extra nombre (ARS)</Label>
-              <Input id="nameExtra" inputMode="decimal" value={nameExtraText} onChange={(e) => setNameExtraText(e.target.value)} />
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="personalizacionExtra">Costo de personalización (ARS)</Label>
+              <Input
+                id="personalizacionExtra"
+                inputMode="decimal"
+                value={personalizacionText}
+                onChange={(e) => setPersonalizacionText(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Se cobra una sola vez: cuesta lo mismo poner el nombre, el dorsal o los dos. Los parches se
+                cobran aparte.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="minNumber">Dorsal mínimo</Label>
@@ -436,15 +448,6 @@ export function ProductCustomizationEditor({
             <div className="space-y-2">
               <Label htmlFor="maxNumber">Dorsal máximo</Label>
               <Input id="maxNumber" type="number" min={0} value={maxNumber} onChange={(e) => setMaxNumber(Number(e.target.value))} />
-            </div>
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="numberExtra">Costo extra dorsal (ARS)</Label>
-              <Input
-                id="numberExtra"
-                inputMode="decimal"
-                value={numberExtraText}
-                onChange={(e) => setNumberExtraText(e.target.value)}
-              />
             </div>
           </div>
 

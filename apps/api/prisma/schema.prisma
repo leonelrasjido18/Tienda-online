@@ -580,6 +580,20 @@ model CustomerAuthCode {
   @@map("customer_magic_codes")
 }
 
+/// Plantillas de correo editables desde el panel. Si una clave no tiene fila,
+/// se usa el texto que trae el codigo: por eso borrar la fila equivale a
+/// "restaurar el original".
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  subject   String
+  bodyHtml  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("email_templates")
+}
+
 model StaticPage {
   id          String   @id @default(uuid())
   title       String
@@ -621,6 +635,9 @@ model Coupon {
   minPurchaseCents Int        @default(0)
   maxUses          Int?
   uses             Int        @default(0)
+  /// Si esta en true, cada cliente puede usarlo una sola vez (se controla
+  /// contra coupon_customer_uses, que ademas queda como registro de uso).
+  oncePerCustomer  Boolean    @default(false)
   expiresAt        DateTime?
   isActive         Boolean    @default(true)
   createdAt        DateTime   @default(now())
@@ -725,6 +742,9 @@ model Order {
   fulfillmentStatus OrderFulfillmentStatus @default(UNFULFILLED)
 
   subtotalCents Int
+  /// Descuento por el medio de pago elegido, separado del cupon: si se
+  /// mezclaran no se sabria cuanto se regalo por cada motivo.
+  paymentDiscountCents Int @default(0)
   depositCents  Int?
   balanceCents  Int?
   shippingCents Int?
@@ -846,6 +866,14 @@ model StoreSettings {
   enableBankTransfer       Boolean  @default(true)
   enableCardPayment        Boolean  @default(true)
   enableCash               Boolean  @default(false)
+
+  /// Descuento por pagar sin pasarela. El modo es "percentage" o "amount";
+  /// el valor es el porcentaje o el monto en centavos segun corresponda.
+  bankTransferDiscountMode  String  @default("percentage")
+  bankTransferDiscountValue Int     @default(0)
+  cashDiscountMode          String  @default("percentage")
+  cashDiscountValue         Int     @default(0)
+
   updatedAt                DateTime @updatedAt
 
   @@map("store_settings")

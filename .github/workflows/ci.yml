@@ -49,7 +49,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # La misma que corre en producción (docker/Dockerfile.api y .web usan
+          # node:22). Con 20 acá, CI podía aprobar código que después rompía en
+          # el servidor, que es justo lo que CI tiene que evitar.
+          node-version: 22
           cache: pnpm
 
       - name: Instalar dependencias (incluye prisma generate)

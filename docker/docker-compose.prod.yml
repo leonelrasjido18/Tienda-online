@@ -75,6 +75,9 @@ services:
       args:
         APP: admin
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        # Sin esto el boton "Activar notificaciones" falla en silencio: el
+        # frontend lee NEXT_PUBLIC_VAPID_PUBLIC_KEY y sin ella lanza excepcion.
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
     restart: unless-stopped
     depends_on:
       - api

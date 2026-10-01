@@ -2,12 +2,30 @@ self.addEventListener('push', (event) => {
   if (!event.data) return;
 
   const payload = event.data.json();
+  const url = payload.url ?? '/dashboard';
+
   event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: '/icon',
-      data: { url: payload.url ?? '/dashboard' },
-    }),
+    (async () => {
+      await self.registration.showNotification(payload.title, {
+        body: payload.body,
+        icon: '/icon',
+        data: { url },
+      });
+
+      // Si el panel esta abierto, ademas del aviso del sistema se le manda el
+      // dato para que muestre el cartel adentro de la pantalla, sin esperar al
+      // sondeo.
+      const clientes = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const cliente of clientes) {
+        cliente.postMessage({
+          tipo: 'pedido-nuevo',
+          titulo: payload.title,
+          cuerpo: payload.body,
+          url,
+          orderId: payload.orderId,
+        });
+      }
+    })(),
   );
 });
 

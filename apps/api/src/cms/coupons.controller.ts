@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -9,18 +10,13 @@ import {
   Param,
   Post,
   Put,
+  UsePipes,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { upsertCouponSchema, type UpsertCouponInput } from '@tienda/shared';
+import { Prisma } from '@prisma/client';
 
-interface CreateCouponInput {
-  code: string;
-  type: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'FREE_SHIPPING';
-  value: number;
-  minPurchaseCents?: number;
-  maxUses?: number | null;
-  expiresAt?: string | null;
-  isActive?: boolean;
-}
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('admin/coupons')
 export class CouponsController {
@@ -50,41 +46,31 @@ export class CouponsController {
     return coupon;
   }
 
-  /** Crea un nuevo cupón de descuento. */
+  /**
+   * Crea un cupón. La validación la hace `upsertCouponSchema`: antes esto
+   * recibía el cuerpo sin revisar (la `interface` de TypeScript no existe en
+   * runtime) y aceptaba un porcentaje de 150, que generaba pedidos con total
+   * negativo.
+   */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async createCoupon(@Body() body: CreateCouponInput) {
-    return this.prisma.coupon.create({
-      data: {
-        code: body.code.toUpperCase().trim(),
-        type: body.type,
-        value: body.value,
-        minPurchaseCents: body.minPurchaseCents ?? 0,
-        maxUses: body.maxUses ?? null,
-        expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
-        isActive: body.isActive !== undefined ? body.isActive : true,
-      },
-    });
+  @UsePipes(new ZodValidationPipe(upsertCouponSchema))
+  async createCoupon(@Body() body: UpsertCouponInput) {
+    try {
+      return await this.prisma.coupon.create({ data: this.toData(body) });
+    } catch (error) {
+      throw this.traducirError(error, body.code);
+    }
   }
 
-  /** Actualiza un cupón existente. */
   @Put(':id')
-  async updateCoupon(
-    @Param('id') id: string,
-    @Body() body: CreateCouponInput,
-  ) {
-    return this.prisma.coupon.update({
-      where: { id },
-      data: {
-        code: body.code.toUpperCase().trim(),
-        type: body.type,
-        value: body.value,
-        minPurchaseCents: body.minPurchaseCents ?? 0,
-        maxUses: body.maxUses ?? null,
-        expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
-        isActive: body.isActive !== undefined ? body.isActive : true,
-      },
-    });
+  @UsePipes(new ZodValidationPipe(upsertCouponSchema))
+  async updateCoupon(@Param('id') id: string, @Body() body: UpsertCouponInput) {
+    try {
+      return await this.prisma.coupon.update({ where: { id }, data: this.toData(body) });
+    } catch (error) {
+      throw this.traducirError(error, body.code);
+    }
   }
 
   /** Elimina un cupón. */
@@ -92,5 +78,29 @@ export class CouponsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteCoupon(@Param('id') id: string) {
     await this.prisma.coupon.delete({ where: { id } });
+  }
+
+  private toData(body: UpsertCouponInput) {
+    return {
+      code: body.code.toUpperCase().trim(),
+      type: body.type,
+      value: body.value,
+      minPurchaseCents: body.minPurchaseCents,
+      maxUses: body.maxUses ?? null,
+      oncePerCustomer: body.oncePerCustomer,
+      expiresAt: body.expiresAt ?? null,
+      isActive: body.isActive,
+    };
+  }
+
+  /** El código es único: sin esto, repetirlo devolvía un 500. */
+  private traducirError(error: unknown, code: string) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return new ConflictException(`Ya existe un cupón con el código ${code.toUpperCase()}`);
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      return new NotFoundException('Cupón no encontrado');
+    }
+    return error;
   }
 }

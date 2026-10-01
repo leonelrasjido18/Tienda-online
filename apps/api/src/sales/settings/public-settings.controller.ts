@@ -16,6 +16,7 @@ export class PublicSettingsController {
   @Get()
   async get(): Promise<PublicStoreSettingsDto & { bankTransferInstructions: string | null }> {
     const settings = await this.settings.get();
+    const descuentos = SettingsService.toPaymentDiscounts(settings);
 
     // El storefront sólo ofrece lo que está configurado (pasarela con credenciales)
     // Y activado por la dueña desde Ajustes → Cobros.
@@ -40,6 +41,9 @@ export class PublicSettingsController {
       contactEmail: settings.contactEmail,
       pickupAddress: settings.pickupAddress,
       openingHours: settings.openingHours,
+      // Para poder anunciar el precio promocional en la ficha y en el checkout.
+      bankTransferDiscount: descuentos.bank_transfer,
+      cashDiscount: descuentos.cash,
     };
   }
 }

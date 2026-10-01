@@ -7,7 +7,9 @@ producción. Está dividido en lo **obligatorio para arrancar** y lo **opcional/
 
 - **VPS**: Hostinger, Ubuntu 24.04 LTS, IP `187.77.234.239` (acceso por clave SSH).
 - **Dominio**: `remerasdelarea.com` → tienda en `remerasdelarea.com`, API en `api.remerasdelarea.com`, panel en `admin.remerasdelarea.com`.
-  El HTTPS lo emite y renueva Caddy automáticamente (Let's Encrypt).
+  El HTTPS lo emite y renueva **certbot** (Let's Encrypt) sobre el **nginx** del host;
+  la renovación la dispara `certbot.timer`. Caddy no se usa: nginx ya es dueño de los
+  puertos 80/443 en este VPS.
 - **Envíos**: **Correo Argentino** en modo manual (tarifas por provincia cargadas en el panel).
   No se usa Andreani.
 - **Seguridad**: acceso por **clave SSH** (no contraseña en texto), firewall y login endurecido.

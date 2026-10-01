@@ -28,6 +28,7 @@ import { useState } from 'react';
 
 import { ApiError } from '@/lib/api';
 import { useApi } from '@/lib/use-api';
+import { useRegisterSave } from './product-save-bus';
 
 const NONE = 'none';
 
@@ -67,6 +68,8 @@ export function ProductGeneralForm({ productId, product }: { productId: string; 
   const api = useApi();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<UpsertProductInput>(toFormInput(product));
+  // Referencia de lo que vino del servidor, para saber si hay cambios sin guardar.
+  const guardado = JSON.stringify(toFormInput(product));
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState<ProductNameSuggestion | null>(null);
@@ -104,6 +107,15 @@ export function ProductGeneralForm({ productId, product }: { productId: string; 
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'No se pudo guardar'),
   });
+
+  // "Guardar y volver" de la cabecera: sólo escribe si el formulario cambió.
+  useRegisterSave(
+    'general',
+    async () => {
+      await saveMutation.mutateAsync();
+    },
+    () => JSON.stringify(form) !== guardado,
+  );
 
   return (
     <form

@@ -34,6 +34,13 @@ export class ReservationExpiryProcessor extends WorkerHost {
 
       await this.stock.release(tx, reservedLines);
 
+      // Igual que el stock, el cupón vuelve a estar disponible: se consumió al
+      // crear el pedido y este nunca se pagó.
+      if (order.couponId) {
+        await tx.coupon.update({ where: { id: order.couponId }, data: { uses: { decrement: 1 } } });
+        await tx.couponCustomerUse.deleteMany({ where: { orderId } });
+      }
+
       await tx.order.update({
         where: { id: orderId },
         data: { financialStatus: 'EXPIRED', fulfillmentStatus: 'CANCELLED' },

@@ -32,6 +32,10 @@ const DEFAULT_SETTINGS: StoreSettingsDto = {
   enableBankTransfer: true,
   enableCardPayment: true,
   enableCash: false,
+  // Sin descuento: si la API no responde, nunca se anuncia un precio que no se
+  // va a respetar al cobrar.
+  bankTransferDiscount: { mode: 'percentage', value: 0 },
+  cashDiscount: { mode: 'percentage', value: 0 },
 };
 
 /**

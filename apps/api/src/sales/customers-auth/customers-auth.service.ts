@@ -113,6 +113,25 @@ export class CustomersAuthService {
   }
 
   /**
+   * Reenvía el código de verificación. El del registro dura 30 minutos, así que
+   * el cliente que abre el mail al día siguiente necesita pedir otro.
+   *
+   * Responde siempre lo mismo, igual que `requestPasswordReset`: si dijera
+   * "ese email no existe" o "ya está verificado", serviría para averiguar qué
+   * direcciones tienen cuenta acá.
+   */
+  async resendVerificationCode(email: string): Promise<{ success: boolean }> {
+    const normalizedEmail = email.toLowerCase().trim();
+    const customer = await this.prisma.customer.findUnique({ where: { email: normalizedEmail } });
+    // Al ya verificado no se le manda nada: sería un mail inútil y un vector
+    // para molestar a alguien pidiendo su código una y otra vez.
+    if (customer && customer.emailVerifiedAt === null) {
+      await this.issueVerificationCode(normalizedEmail);
+    }
+    return { success: true };
+  }
+
+  /**
    * Pide un código de restablecimiento. Siempre responde igual, exista o no la
    * cuenta, para no revelar qué emails están registrados.
    */

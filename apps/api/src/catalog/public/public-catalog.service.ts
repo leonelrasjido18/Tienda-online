@@ -414,6 +414,32 @@ export class PublicCatalogService {
       params.push(filters.seasonId);
       paramIdx++;
     }
+    // Disponibilidad y precio faltaban: en la pestaña "Stock inmediato" los
+    // talles se contaban sobre TODO el catálogo, así que ofrecía "XL (2756)"
+    // cuando había 68 productos con stock. El resto de las facetas (ligas,
+    // rango de precios) sí los respetaba, con lo cual el panel se contradecía.
+    const EXISTE_STOCK = `EXISTS (
+      SELECT 1 FROM product_variants sv
+      JOIN inventory_items si ON si."variantId" = sv.id
+      WHERE sv."productId" = p.id AND si.quantity > 0
+    )`;
+    if (filters.disponibilidad === 'stock') {
+      conditions.push(EXISTE_STOCK);
+    } else if (filters.disponibilidad === 'encargo') {
+      conditions.push(`NOT ${EXISTE_STOCK}`);
+    }
+    // El precio se mide sobre la MISMA variante, igual que en el listado: que
+    // exista una variante dentro del rango, no dos que lo cumplan por separado.
+    if (filters.minPrice !== undefined) {
+      conditions.push(`pv."priceCents" >= $${paramIdx}`);
+      params.push(filters.minPrice * 100);
+      paramIdx++;
+    }
+    if (filters.maxPrice !== undefined) {
+      conditions.push(`pv."priceCents" <= $${paramIdx}`);
+      params.push(filters.maxPrice * 100);
+      paramIdx++;
+    }
 
     const whereClause = conditions.join(' AND ');
 

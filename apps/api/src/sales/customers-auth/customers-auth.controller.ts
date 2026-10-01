@@ -5,12 +5,14 @@ import {
   customerLoginSchema,
   customerRegisterSchema,
   customerRequestResetSchema,
+  customerResendVerificationSchema,
   customerResetPasswordSchema,
   customerVerifyEmailSchema,
   customerProfileUpdateSchema,
   type CustomerLoginInput,
   type CustomerRegisterInput,
   type CustomerRequestResetInput,
+  type CustomerResendVerificationInput,
   type CustomerResetPasswordInput,
   type CustomerVerifyEmailInput,
   type CustomerProfileUpdateInput,
@@ -74,6 +76,22 @@ export class CustomersAuthController {
   @HttpCode(HttpStatus.OK)
   async verifyEmail(@Body(new ZodValidationPipe(customerVerifyEmailSchema)) body: CustomerVerifyEmailInput) {
     return this.authService.verifyEmail(body.email, body.code);
+  }
+
+  /**
+   * Reenvío del código. El límite es más bajo que el de `verify-email` porque
+   * acá cada llamada manda un mail: sin freno sirve para inundarle la casilla a
+   * cualquiera con solo saber su dirección.
+   */
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 300000 } })
+  @UseGuards(TurnstileGuard)
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  async resendVerification(
+    @Body(new ZodValidationPipe(customerResendVerificationSchema)) body: CustomerResendVerificationInput,
+  ) {
+    return this.authService.resendVerificationCode(body.email);
   }
 
   @Public()

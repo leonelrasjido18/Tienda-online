@@ -63,7 +63,15 @@ export default function LoginPage() {
           body: JSON.stringify({ email, password }),
         });
       }
-      router.push(redirectTo);
+      // Al registrarse sale un código de verificación por mail, así que se lo
+      // lleva a la pantalla donde cargarlo. Pero si venía con `redirect` puesto
+      // (típicamente desde el checkout), manda eso: cortarle la compra para
+      // pedirle un código sería peor, y verificar no es obligatorio para pagar.
+      if (mode === 'register' && !searchParams.get('redirect')) {
+        router.push(`/verificar?email=${encodeURIComponent(email)}`);
+      } else {
+        router.push(redirectTo);
+      }
       router.refresh();
     } catch (err) {
       setError(

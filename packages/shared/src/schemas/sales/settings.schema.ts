@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+import { PAYMENT_DISCOUNT_MODES } from '../../lib/payment-discount';
+
+/** Descuento por medio de pago, tal como se guarda y se edita. */
+const paymentDiscountSchema = z.object({
+  mode: z.enum(PAYMENT_DISCOUNT_MODES),
+  /** Porcentaje (1 = 1%) o monto en centavos. Cero = sin descuento. */
+  value: z.number().int().nonnegative(),
+});
+
 export const updateStoreSettingsSchema = z.object({
   defaultDepositPercent: z.number().int().min(1).max(100).optional(),
   bankTransferInstructions: z.string().max(2000).nullable().optional(),
@@ -12,6 +21,8 @@ export const updateStoreSettingsSchema = z.object({
   enableBankTransfer: z.boolean().optional(),
   enableCardPayment: z.boolean().optional(),
   enableCash: z.boolean().optional(),
+  bankTransferDiscount: paymentDiscountSchema.optional(),
+  cashDiscount: paymentDiscountSchema.optional(),
 });
 export type UpdateStoreSettingsInput = z.infer<typeof updateStoreSettingsSchema>;
 
@@ -28,6 +39,9 @@ export const publicStoreSettingsSchema = z.object({
   contactEmail: z.string().nullable(),
   pickupAddress: z.string().nullable(),
   openingHours: z.string().nullable(),
+  /** Para anunciar el precio promocional en la ficha y en el checkout. */
+  bankTransferDiscount: paymentDiscountSchema,
+  cashDiscount: paymentDiscountSchema,
 });
 export type PublicStoreSettingsDto = z.infer<typeof publicStoreSettingsSchema>;
 
@@ -43,5 +57,7 @@ export const storeSettingsSchema = z.object({
   enableBankTransfer: z.boolean(),
   enableCardPayment: z.boolean(),
   enableCash: z.boolean(),
+  bankTransferDiscount: paymentDiscountSchema,
+  cashDiscount: paymentDiscountSchema,
 });
 export type StoreSettingsDto = z.infer<typeof storeSettingsSchema>;

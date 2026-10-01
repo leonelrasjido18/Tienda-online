@@ -13,8 +13,12 @@ export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
 
   @Get()
-  get() {
-    return this.settings.get();
+  async get() {
+    const settings = await this.settings.get();
+    const descuentos = SettingsService.toPaymentDiscounts(settings);
+    // Se devuelve la forma anidada, la misma que consume el storefront: si el
+    // panel leyera las columnas planas habria dos maneras de leer lo mismo.
+    return { ...settings, bankTransferDiscount: descuentos.bank_transfer, cashDiscount: descuentos.cash };
   }
 
   @Patch()

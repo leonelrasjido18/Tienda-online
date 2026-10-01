@@ -1,4 +1,5 @@
 import type { ProductDetailDto, ProductListItemDto, ReviewSummaryDto } from '@tienda/shared';
+import { getStoreSettings } from '@/lib/api-safe';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
@@ -64,7 +65,12 @@ export async function generateMetadata({ params }: PageProps<'/productos/[slug]'
 
 export default async function ProductPage({ params }: PageProps<'/productos/[slug]'>) {
   const { slug } = await params;
-  const [product, related, reviews] = await Promise.all([getProduct(slug), getRelated(slug), getReviews(slug)]);
+  const [product, related, reviews, settings] = await Promise.all([
+    getProduct(slug),
+    getRelated(slug),
+    getReviews(slug),
+    getStoreSettings(),
+  ]);
 
   if (!product) {
     notFound();
@@ -126,7 +132,7 @@ export default async function ProductPage({ params }: PageProps<'/productos/[slu
         <span className="truncate font-medium text-foreground">{product.name}</span>
       </nav>
 
-      <VariantSelector product={product} />
+      <VariantSelector product={product} settings={settings} />
 
       <ProductReviews productId={product.id} initial={reviews} />
 

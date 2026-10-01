@@ -3,6 +3,9 @@ import { randomBytes } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  calculateCustomizationExtraCents,
+  calculatePaymentDiscountCents,
+  resolvePaymentDiscount,
   applyDiscountToPlan,
   calculatePaymentPlan,
   formatCentsAsArs,
@@ -27,7 +30,6 @@ import { RenderService } from '../../catalog/customization/render.service';
 import { UploadsService } from '../../catalog/uploads/uploads.service';
 import type { Env } from '../../config/env.validation';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MailService } from '../notifications/mail.service';
 import { PushService } from '../notifications/push.service';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { SettingsService } from '../settings/settings.service';
@@ -67,7 +69,6 @@ export class CheckoutService {
     private readonly render: RenderService,
     private readonly uploads: UploadsService,
     private readonly payments: PaymentProviderRegistry,
-    private readonly mail: MailService,
     private readonly push: PushService,
     private readonly config: ConfigService<Env, true>,
     @InjectQueue(STOCK_RESERVATION_QUEUE) private readonly reservationQueue: Queue<StockReservationJobData>,
@@ -83,9 +84,26 @@ export class CheckoutService {
     if (rawItems.length === 0) {
       throw new BadRequestException('El carrito está vacío');
     }
+    // Segunda barrera: el precio pudo quedar en cero DESPUÉS de agregarlo al
+    // carrito. Cobrar $0 por un pedido real no se puede deshacer.
+    const sinPrecio = rawItems.find((item) => item.variant.priceCents <= 0);
+    if (sinPrecio) {
+      throw new BadRequestException(
+        `${sinPrecio.variant.product.name} todavía no tiene precio cargado. Sacalo del carrito para continuar.`,
+      );
+    }
 
     const storeSettings = await this.settings.get();
     const preparedLines = await this.prepareLines(rawItems);
+
+    // El pedido queda enlazado a la cuenta del cliente si existe una con ese
+    // email. Sin esto `Order.customerId` quedaba siempre vacio: "Mis pedidos"
+    // salia vacio y no habia contra que controlar el limite por cliente.
+    const cliente = await this.prisma.customer.findUnique({
+      where: { email: input.contact.email.toLowerCase().trim() },
+      select: { id: true },
+    });
+    const customerId = cliente?.id ?? null;
 
     const order = await this.prisma.$transaction(async (tx) => {
       const variantIds = rawItems.map((i) => i.variantId);
@@ -135,12 +153,28 @@ export class CheckoutService {
       let discountCents = 0;
       let effectivePlan = plan;
       if (input.couponCode) {
-        const applied = await this.resolveAndConsumeCoupon(tx, input.couponCode, plan.subtotalCents);
+        const applied = await this.resolveAndConsumeCoupon(tx, input.couponCode, plan.subtotalCents, customerId);
         couponId = applied.couponId;
         discountCents = applied.discountCents;
         effectivePlan = applyDiscountToPlan(plan, discountCents, storeSettings.defaultDepositPercent);
       }
-      const netTotalCents = plan.subtotalCents - discountCents;
+      // Descuento por el medio de pago (transferencia o efectivo). Se calcula
+      // sobre lo que queda DESPUÉS del cupón: si no, dos descuentos sobre el
+      // precio de lista podrían sumar más que el producto.
+      const baseParaMedioDePago = plan.subtotalCents - discountCents;
+      const paymentDiscountCents = calculatePaymentDiscountCents(
+        baseParaMedioDePago,
+        resolvePaymentDiscount(input.paymentMethod, SettingsService.toPaymentDiscounts(storeSettings)),
+      );
+      if (paymentDiscountCents > 0) {
+        effectivePlan = applyDiscountToPlan(
+          plan,
+          discountCents + paymentDiscountCents,
+          storeSettings.defaultDepositPercent,
+        );
+      }
+
+      const netTotalCents = baseParaMedioDePago - paymentDiscountCents;
 
       // Los métodos offline dan más tiempo: el cliente va al banco o paga al retirar.
       const reservationMinutes =
@@ -166,6 +200,7 @@ export class CheckoutService {
       const created = await tx.order.create({
         data: {
           publicToken: randomBytes(32).toString('base64url'),
+          customerId,
           contactName: input.contact.name,
           contactEmail: input.contact.email,
           contactPhone: input.contact.phone ?? null,
@@ -173,6 +208,7 @@ export class CheckoutService {
           paymentPlan: effectivePlan.plan,
           subtotalCents: plan.subtotalCents,
           discountCents,
+          paymentDiscountCents,
           couponId,
           depositCents: effectivePlan.depositCents,
           balanceCents: effectivePlan.balanceCents,
@@ -217,6 +253,13 @@ export class CheckoutService {
         include: { payments: true },
       });
 
+      // Registro de uso del cupon. La tabla existia en el esquema desde el
+      // principio pero nadie escribia en ella, asi que el limite por cliente
+      // nunca podia cumplirse. Se crea despues de la orden porque necesita su id.
+      if (couponId && customerId) {
+        await tx.couponCustomerUse.create({ data: { couponId, customerId, orderId: created.id } });
+      }
+
       return created;
     });
 
@@ -257,20 +300,18 @@ export class CheckoutService {
       { delay: order.expiresAt ? order.expiresAt.getTime() - Date.now() : undefined, jobId: order.id },
     );
 
-    const mailContext = {
-      number: order.number,
-      contactName: order.contactName,
-      contactEmail: order.contactEmail,
-      totalCents: order.totalCents,
-      dueTodayCents: payment.amountCents,
-      paymentPlan: order.paymentPlan,
-    };
-    await this.mail.sendOrderConfirmation(mailContext);
-    await this.mail.sendSaleAlert(mailContext, 'Nuevo pedido');
+    // Acá NO se manda mail. La confirmación sale cuando el pago se aprueba
+    // (`OrdersService.onPaymentApproved`): mandarla al crear el pedido hacía que
+    // el cliente y el dueño recibieran "pedido confirmado" por compras que
+    // después quedaban pendientes o fallidas.
+    // El push sí se manda igual: es el aviso interno de que entró un intento.
     await this.push.broadcast({
       title: `Nuevo pedido ${formatOrderNumber(order.number)}`,
       body: `${order.contactName} — ${payment.kind === 'FULL' ? 'pago total' : 'seña'} pendiente`,
-      url: `/pedidos/${order.id}`,
+      // La ruta del panel es /dashboard/pedidos/:id; sin el prefijo, tocar la
+      // notificación del sistema abría una página que no existe.
+      url: `/dashboard/pedidos/${order.id}`,
+      orderId: order.id,
     });
 
     return {
@@ -418,6 +459,7 @@ export class CheckoutService {
     tx: Prisma.TransactionClient,
     code: string,
     subtotalCents: number,
+    customerId: string | null,
   ): Promise<{ couponId: string; discountCents: number }> {
     const normalized = code.toUpperCase().trim();
     const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM coupons WHERE code = ${normalized} FOR UPDATE`;
@@ -441,6 +483,18 @@ export class CheckoutService {
         `El monto mínimo de compra para este cupón es ${formatCentsAsArs(coupon.minPurchaseCents)}.`,
       );
     }
+    if (coupon.oncePerCustomer) {
+      if (!customerId) {
+        throw new BadRequestException('Este cupón es de un solo uso por cliente: iniciá sesión para aplicarlo.');
+      }
+      const yaUsado = await tx.couponCustomerUse.findFirst({
+        where: { couponId: coupon.id, customerId },
+        select: { id: true },
+      });
+      if (yaUsado) {
+        throw new BadRequestException('Ya usaste este cupón.');
+      }
+    }
 
     let discountCents = 0;
     switch (coupon.type) {
@@ -454,6 +508,10 @@ export class CheckoutService {
         discountCents = 0;
         break;
     }
+    // Nunca más que el subtotal. El plan de pago ya recortaba, pero el total del
+    // pedido se calculaba con este valor en crudo: un cupón mal cargado (más de
+    // 100%) dejaba el pedido guardado con total negativo.
+    discountCents = Math.min(discountCents, subtotalCents);
 
     await tx.coupon.update({ where: { id: coupon.id }, data: { uses: { increment: 1 } } });
     return { couponId: coupon.id, discountCents };
@@ -495,6 +553,14 @@ export class CheckoutService {
         .map((item) => ({ variantId: item.variantId as string, quantity: item.quantity }));
       await this.stock.lockInventory(tx, reservedLines.map((line) => line.variantId));
       await this.stock.release(tx, reservedLines);
+      // El cupon se consumio al crear el pedido; si el pedido no prospera hay
+      // que devolverlo. Sin esto, diez carritos abandonados agotaban un cupon
+      // de diez usos sin una sola venta.
+      if (order.couponId) {
+        await tx.coupon.update({ where: { id: order.couponId }, data: { uses: { decrement: 1 } } });
+        await tx.couponCustomerUse.deleteMany({ where: { orderId } });
+      }
+
       await tx.order.update({
         where: { id: orderId },
         data: { financialStatus: 'FAILED', fulfillmentStatus: 'CANCELLED', expiresAt: null },
@@ -512,19 +578,15 @@ export class CheckoutService {
     return hasContent ? draft : null;
   }
 
+  /**
+   * Delegado en `@tienda/shared` a propósito: este cálculo estaba duplicado en
+   * el carrito y en el checkout, y dos copias del precio son dos precios.
+   */
   private computeExtraCents(
     draft: CartCustomizationDraft | null,
     template: CartItemWithRelations['variant']['product']['customization'],
   ): number {
-    if (!draft || !template) return 0;
-    let extra = 0;
-    if (draft.playerName) extra += template.nameExtraCents;
-    if (draft.playerNumber !== undefined) extra += template.numberExtraCents;
-    for (const patchId of draft.patchIds ?? []) {
-      const option = template.patchOptions.find((po) => po.patchId === patchId);
-      if (option) extra += option.patch.priceCents;
-    }
-    return extra;
+    return calculateCustomizationExtraCents(draft, template);
   }
 
   private optionsLabel(item: CartItemWithRelations): string {

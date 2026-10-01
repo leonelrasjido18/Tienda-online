@@ -10,6 +10,8 @@ export interface PushPayload {
   title: string;
   body: string;
   url?: string;
+  /** Lo usa el service worker para avisarle al panel abierto qué pedido entró. */
+  orderId?: string;
 }
 
 @Injectable()

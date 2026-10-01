@@ -82,6 +82,30 @@ export const bulkUpdateVariantsSchema = z.object({
 
 export type BulkUpdateVariantsInput = z.infer<typeof bulkUpdateVariantsSchema>;
 
+/** Nombres fijos de la opción de manga: el frente los usa para el selector. */
+export const SLEEVE_OPTION_NAME = 'Manga';
+export const SLEEVE_SHORT_VALUE = 'Corta';
+export const SLEEVE_LONG_VALUE = 'Larga';
+
+/**
+ * Carga rápida: talles (y opcionalmente manga) más precios, en una sola
+ * operación. Hacerlo en tres pasos desde el panel dejaba el producto a medio
+ * armar si alguno fallaba, y las variantes recién creadas salían a precio 0.
+ */
+export const quickVariantSetupSchema = z.object({
+  sizes: z.array(z.string().trim().min(1).max(60)).min(1).max(30),
+  /** Agrega la opción Manga (Corta/Larga) y duplica las combinaciones. */
+  withLongSleeve: z.boolean().default(false),
+  priceCents: moneyCentsSchema,
+  /** Precio de las combinaciones de manga larga. Si falta, se usa `priceCents`. */
+  longSleevePriceCents: moneyCentsSchema.nullish(),
+  quantity: z.number().int().nonnegative().default(0),
+  trackInventory: z.boolean().default(true),
+  allowPreorder: z.boolean().default(true),
+});
+
+export type QuickVariantSetupInput = z.infer<typeof quickVariantSetupSchema>;
+
 // ---------------------------------------------------------------------------
 // Escritura: imágenes
 // ---------------------------------------------------------------------------

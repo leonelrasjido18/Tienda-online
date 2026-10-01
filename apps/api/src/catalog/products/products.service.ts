@@ -4,16 +4,28 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type {
   BulkUpdateVariantsInput,
   ProductDetailDto,
+  QuickVariantSetupInput,
   ReplaceProductOptionsInput,
   UpsertProductInput,
   UpsertVariantInput,
 } from '@tienda/shared';
-import { MAX_PRODUCT_OPTIONS } from '@tienda/shared';
+import {
+  MAX_PRODUCT_OPTIONS,
+  SLEEVE_LONG_VALUE,
+  SLEEVE_OPTION_NAME,
+  SLEEVE_SHORT_VALUE,
+} from '@tienda/shared';
 import type { Prisma, ProductStatus } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { TemplatesService } from '../customization/templates.service';
-import { combinationKey, generateVariantCombinations, suggestSku } from './variant-generator';
+import {
+  combinationKey,
+  generateVariantCombinations,
+  optionValueKey,
+  planVariantRelink,
+  suggestSku,
+} from './variant-generator';
 
 const PRODUCT_DETAIL_INCLUDE = {
   brand: true,
@@ -189,6 +201,36 @@ export class ProductsService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      // Qué combinación tenía cada variante ANTES de tocar las opciones. Borrar
+      // una opción arrastra sus valores y, por cascada, los enlaces de las
+      // variantes: sin este rescate las variantes quedan vivas pero huérfanas,
+      // sin talle, imposibles de comprar y mostrando "(sin talle)" en la grilla.
+      const previas = await tx.productVariant.findMany({
+        where: { productId: id },
+        select: {
+          id: true,
+          optionValues: { select: { value: { select: { value: true, option: { select: { name: true } } } } } },
+        },
+      });
+      const combinacionPrevia = previas.map((v) => ({
+        variantId: v.id,
+        claves: v.optionValues.map((ov) => optionValueKey(ov.value.option.name, ov.value.value)),
+      }));
+
+      // Las fotos también se atan a un valor de opción (es lo que hace que la
+      // ficha cambie la foto al elegir "Manga: Larga"). Ese vínculo es SetNull,
+      // así que sin rescatarlo se pierde en silencio cada vez que se guardan
+      // las opciones, aunque no se haya cambiado nada.
+      const fotosPrevias = await tx.productImage.findMany({
+        where: { productId: id, optionValueId: { not: null } },
+        select: { id: true, optionValue: { select: { value: true, option: { select: { name: true } } } } },
+      });
+      const claveDeFoto = new Map(
+        fotosPrevias
+          .filter((f) => f.optionValue)
+          .map((f) => [f.id, optionValueKey(f.optionValue!.option.name, f.optionValue!.value)]),
+      );
+
       await tx.productOption.deleteMany({ where: { productId: id } });
       for (const [optionIndex, option] of input.options.entries()) {
         await tx.productOption.create({
@@ -204,6 +246,44 @@ export class ProductsService {
             },
           },
         });
+      }
+
+      if (previas.length === 0) return;
+
+      // Se reconstruyen los enlaces contra los valores nuevos, emparejando por
+      // nombre de opción y texto del valor. Renombrar o reordenar no pierde nada;
+      // cambiar los valores sí, y esas variantes ya no representan nada.
+      const nuevos = await tx.productOptionValue.findMany({
+        where: { option: { productId: id } },
+        select: { id: true, value: true, optionId: true, option: { select: { name: true } } },
+      });
+      const { enlaces, huerfanas } = planVariantRelink(
+        combinacionPrevia,
+        nuevos.map((v) => ({ id: v.id, optionId: v.optionId, clave: optionValueKey(v.option.name, v.value) })),
+      );
+
+      if (enlaces.length > 0) {
+        await tx.variantOptionValue.createMany({ data: enlaces, skipDuplicates: true });
+      }
+
+      // Las que no se pudieron reconstruir se borran: dejarlas era justamente el
+      // bug. `OrderItem.variantId` es SetNull, así que los pedidos ya hechos
+      // conservan nombre, SKU y precio congelados.
+      if (huerfanas.length > 0) {
+        await tx.productVariant.deleteMany({ where: { id: { in: huerfanas } } });
+      }
+
+      // Se reatan las fotos cuyo valor sigue existiendo. Las que apuntaban a un
+      // valor eliminado quedan sin atar, que es lo correcto: ese valor ya no se
+      // puede elegir.
+      const valorPorClave = new Map(
+        nuevos.map((v) => [optionValueKey(v.option.name, v.value), v.id] as const),
+      );
+      for (const [imageId, clave] of claveDeFoto) {
+        const valueId = valorPorClave.get(clave);
+        if (valueId) {
+          await tx.productImage.update({ where: { id: imageId }, data: { optionValueId: valueId } });
+        }
       }
     });
 
@@ -279,6 +359,65 @@ export class ProductsService {
         });
       }
     });
+
+    return this.getDetail(productId);
+  }
+
+  /**
+   * Arma talles (y manga, si corresponde), genera todas las combinaciones y les
+   * pone precio y stock de una vez.
+   *
+   * Existe porque hacerlo a mano eran tres pasos —guardar opciones, generar
+   * variantes, completar la grilla— y `generateVariants` crea todo a precio 0:
+   * si te olvidabas del tercero, el producto quedaba publicado a $0.
+   */
+  async quickVariantSetup(productId: string, input: QuickVariantSetupInput): Promise<ProductDetailDto> {
+    const talles = [...new Set(input.sizes.map((s) => s.trim()).filter(Boolean))];
+    if (talles.length === 0) {
+      throw new BadRequestException('Hay que indicar al menos un talle');
+    }
+
+    const options: ReplaceProductOptionsInput['options'] = [
+      { name: 'Talle', position: 0, values: talles.map((value, position) => ({ value, position })) },
+    ];
+    if (input.withLongSleeve) {
+      options.push({
+        name: SLEEVE_OPTION_NAME,
+        position: 1,
+        values: [
+          { value: SLEEVE_SHORT_VALUE, position: 0 },
+          { value: SLEEVE_LONG_VALUE, position: 1 },
+        ],
+      });
+    }
+
+    await this.replaceOptions(productId, { options });
+    await this.generateVariants(productId);
+
+    // El precio se decide por variante: la manga larga sale más cara. Se mira el
+    // valor enlazado y no el SKU, que es texto generado y puede cambiar.
+    const variantes = await this.prisma.productVariant.findMany({
+      where: { productId },
+      select: {
+        id: true,
+        optionValues: { select: { value: { select: { value: true, option: { select: { name: true } } } } } },
+      },
+    });
+
+    const precioLargas = input.longSleevePriceCents ?? input.priceCents;
+    for (const variante of variantes) {
+      const esLarga = variante.optionValues.some(
+        (ov) =>
+          ov.value.option.name.trim().toLowerCase() === SLEEVE_OPTION_NAME.toLowerCase() &&
+          ov.value.value.trim().toLowerCase() === SLEEVE_LONG_VALUE.toLowerCase(),
+      );
+      await this.updateVariant(productId, variante.id, {
+        priceCents: esLarga ? precioLargas : input.priceCents,
+        quantity: input.quantity,
+        trackInventory: input.trackInventory,
+        allowPreorder: input.allowPreorder,
+      });
+    }
 
     return this.getDetail(productId);
   }

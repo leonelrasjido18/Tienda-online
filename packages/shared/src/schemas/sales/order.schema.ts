@@ -50,7 +50,11 @@ export type PaymentKind = (typeof PAYMENT_KINDS)[number];
 export const PAYMENT_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> = {
   PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'],
   APPROVED: ['REFUNDED'],
-  REJECTED: [],
+  // Un rechazo NO es definitivo: la pasarela deja reintentar sobre el mismo
+  // pago y puede terminar aprobándolo. Ualá lo hace (PENDING -> REJECTED ->
+  // APPROVED sobre el mismo uuid). Tratarlo como final hacía que se cobrara al
+  // cliente y el pedido quedara cancelado.
+  REJECTED: ['APPROVED'],
   CANCELLED: [],
   REFUNDED: [],
 };
@@ -139,13 +143,29 @@ export const orderItemCustomizationDtoSchema = z.object({
   extraCents: z.number().int(),
   previewImageUrl: z.string().nullable(),
   productionImageUrl: z.string().nullable(),
+  /** Nombres resueltos: `fontId` y `patchIds` por si solos no le dicen nada a nadie. */
+  fontName: z.string().nullable(),
+  patchNames: z.array(z.string()),
 });
+
+/**
+ * Opción elegida, con su nombre. `optionsLabel` guarda solo los valores sueltos
+ * ("Larga / S"), que no alcanza para decir cuál es el talle y cuál la manga.
+ */
+export const orderItemOptionDtoSchema = z.object({
+  name: z.string(),
+  value: z.string(),
+});
+export type OrderItemOptionDto = z.infer<typeof orderItemOptionDtoSchema>;
 
 export const orderItemDtoSchema = z.object({
   id: z.string().uuid(),
   productName: z.string(),
+  /** Para enlazar a la ficha. Es null si el producto se borró después de la venta. */
+  productSlug: z.string().nullable(),
   variantSku: z.string(),
   optionsLabel: z.string().nullable(),
+  options: z.array(orderItemOptionDtoSchema),
   imageUrl: z.string().nullable(),
   unitPriceCents: z.number().int(),
   quantity: z.number().int(),

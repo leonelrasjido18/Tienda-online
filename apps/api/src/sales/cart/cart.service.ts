@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { calculateCustomizationExtraCents } from '@tienda/shared';
 import type { AddCartItemInput, CartCustomizationDraft, CartDto, CartItemDto } from '@tienda/shared';
 import { Prisma } from '@prisma/client';
 
@@ -63,6 +64,12 @@ export class CartService {
     });
     if (!variant || variant.product.status !== 'ACTIVE') {
       throw new NotFoundException('La variante no existe');
+    }
+    // Una variante a $0 es un precio sin cargar, no un regalo: generar
+    // variantes las crea en cero y es fácil publicar sin completar la grilla.
+    // Sin este freno se podían comprar gratis.
+    if (variant.priceCents <= 0) {
+      throw new BadRequestException('Este producto todavía no tiene precio cargado.');
     }
 
     const hasCustomization = !!input.customization && Object.keys(input.customization).length > 0;
@@ -230,18 +237,14 @@ export class CartService {
     };
   }
 
+  /**
+   * Delegado en `@tienda/shared` a propósito: este cálculo estaba duplicado en
+   * el carrito y en el checkout, y dos copias del precio son dos precios.
+   */
   private computeExtraCents(
     draft: CartCustomizationDraft | null,
     template: CartItemWithRelations['variant']['product']['customization'],
   ): number {
-    if (!draft || !template) return 0;
-    let extra = 0;
-    if (draft.playerName) extra += template.nameExtraCents;
-    if (draft.playerNumber !== undefined) extra += template.numberExtraCents;
-    for (const patchId of draft.patchIds ?? []) {
-      const option = template.patchOptions.find((po) => po.patchId === patchId);
-      if (option) extra += option.patch.priceCents;
-    }
-    return extra;
+    return calculateCustomizationExtraCents(draft, template);
   }
 }

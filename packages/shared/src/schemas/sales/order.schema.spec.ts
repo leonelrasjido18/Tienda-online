@@ -43,4 +43,18 @@ describe('canTransitionPayment', () => {
     expect(canTransitionPayment('APPROVED', 'PENDING')).toBe(false);
     expect(canTransitionPayment('CANCELLED', 'APPROVED')).toBe(false);
   });
+
+  it('acepta que un pago rechazado termine aprobado', () => {
+    // Pasó en produccion: Uala mando PENDING -> REJECTED -> APPROVED sobre el
+    // mismo pago (el cliente reintento). Con REJECTED como estado final, la
+    // aprobacion se descartaba: al cliente se le cobraba y el pedido quedaba
+    // cancelado.
+    expect(canTransitionPayment('REJECTED', 'APPROVED')).toBe(true);
+  });
+
+  it('un pago rechazado no puede volver a quedar pendiente ni cancelarse', () => {
+    expect(canTransitionPayment('REJECTED', 'PENDING')).toBe(false);
+    expect(canTransitionPayment('REJECTED', 'CANCELLED')).toBe(false);
+    expect(canTransitionPayment('REJECTED', 'REFUNDED')).toBe(false);
+  });
 });

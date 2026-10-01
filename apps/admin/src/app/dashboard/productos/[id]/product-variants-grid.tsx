@@ -7,6 +7,7 @@ import { useState } from 'react';
 
 import { ApiError } from '@/lib/api';
 import { useApi } from '@/lib/use-api';
+import { useRegisterSave } from './product-save-bus';
 
 type VariantDto = ProductDetailDto['variants'][number];
 type OptionsDto = ProductDetailDto['options'];
@@ -49,6 +50,8 @@ export function ProductVariantsGrid({
   // El componente se remonta (vía `key` en el padre) cuando cambia el conjunto de
   // variantes, así que este estado sólo necesita inicializarse una vez por montaje.
   const [rows, setRows] = useState<VariantRowState[]>(() => toRows(variants));
+  // Referencia de lo que vino del servidor, para detectar cambios sin guardar.
+  const guardado = JSON.stringify(toRows(variants));
   const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['admin', 'products', productId] });
@@ -88,6 +91,15 @@ export function ProductVariantsGrid({
     mutationFn: (variantId: string) => api(`/admin/products/${productId}/variants/${variantId}`, { method: 'DELETE' }),
     onSuccess: invalidate,
   });
+
+  // "Guardar y volver" de la cabecera: sólo manda la grilla si se tocó algo.
+  useRegisterSave(
+    'variants',
+    async () => {
+      await saveMutation.mutateAsync();
+    },
+    () => rows.length > 0 && JSON.stringify(rows) !== guardado,
+  );
 
   if (variants.length === 0) {
     return <p className="text-sm text-muted-foreground">Todavía no hay variantes generadas.</p>;

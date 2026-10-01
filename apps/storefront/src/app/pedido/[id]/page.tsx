@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Landmark, CreditCard, MessageSquare } from 'lucide-react';
 
 import { clientFetch } from '@/lib/client-api';
+import { DatosDePago } from './datos-de-pago';
 import { trackEvent } from '@/lib/analytics';
 
 // Estados en los que ya entró dinero: se cuenta como conversión de compra.
@@ -100,8 +101,10 @@ export default function OrderConfirmationPage() {
     return <p className="mx-auto max-w-xl px-4 py-8 text-sm text-muted-foreground">Cargando…</p>;
   }
 
-  const pendingBankTransfer = order.payments.find(
-    (p) => p.provider === 'bank_transfer' && p.status === 'PENDING',
+  // Transferencia y efectivo comparten pantalla: los dos se pagan fuera de la
+  // web y necesitan lo mismo (monto, datos y cómo mandar el comprobante).
+  const pagoEnMano = order.payments.find(
+    (p) => (p.provider === 'bank_transfer' || p.provider === 'cash') && p.status === 'PENDING',
   );
 
   async function handleRetryPayment() {
@@ -180,31 +183,26 @@ export default function OrderConfirmationPage() {
         </div>
       )}
 
-      {pendingBankTransfer && !showRetry && (
-        <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4 text-left text-sm space-y-4">
-          <div>
-            <p className="font-medium">
-              Transferí {formatCentsAsArs(pendingBankTransfer.amountCents)} para confirmar tu
-              pedido.
-            </p>
-            <p className="mt-1 text-muted-foreground">
-              Te vamos a avisar por email apenas confirmemos la recepción de la transferencia.
-            </p>
-            {bankTransferInstructions && (
-              <p className="mt-3 whitespace-pre-line border-t border-border pt-3 text-muted-foreground">
-                {bankTransferInstructions}
-              </p>
-            )}
-          </div>
-          <div className="pt-2 border-t border-border">
+      {pagoEnMano && !showRetry && (
+        <>
+          <DatosDePago
+            metodo={pagoEnMano.provider as 'bank_transfer' | 'cash'}
+            montoCents={pagoEnMano.amountCents}
+            numeroPedido={order.displayNumber}
+            nombreCliente={order.contactName}
+            instrucciones={bankTransferInstructions}
+            direccionRetiro={tienda?.pickupAddress ?? null}
+            whatsappPhone={tienda?.whatsappPhone ?? null}
+          />
+          <div className="mt-3 text-left">
             <button
               onClick={() => setShowRetry(true)}
-              className="text-xs text-accent font-semibold hover:underline"
+              className="text-xs font-semibold text-accent hover:underline"
             >
               ¿Preferís pagar online con tarjeta de crédito o débito?
             </button>
           </div>
-        </div>
+        </>
       )}
 
       {order.financialStatus === 'PENDING' && showRetry && (
@@ -257,7 +255,7 @@ export default function OrderConfirmationPage() {
           {retryError && <p className="text-xs text-destructive">{retryError}</p>}
 
           <div className="flex gap-2">
-            {pendingBankTransfer && (
+            {pagoEnMano && (
               <button
                 type="button"
                 onClick={() => setShowRetry(false)}
@@ -271,7 +269,7 @@ export default function OrderConfirmationPage() {
               disabled={retrying || (selectedMethod !== 'bank_transfer' && !turnstileToken)}
               className={
                 'rounded-md bg-primary py-2 text-xs font-bold text-primary-foreground hover:bg-primary/95 disabled:opacity-50 ' +
-                (pendingBankTransfer ? 'w-2/3' : 'w-full')
+                (pagoEnMano ? 'w-2/3' : 'w-full')
               }
             >
               {retrying

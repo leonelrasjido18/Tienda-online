@@ -16,7 +16,7 @@ Crear registros **A** apuntando todos al VPS:
 | A    | `api`   | `187.77.234.239` |
 | A    | `admin` | `187.77.234.239` |
 
-> Esperar a que propague (`nslookup api.remerasdelarea.com`) antes del paso 6, o Caddy no
+> Esperar a que propague (`nslookup api.remerasdelarea.com`) antes del paso 6, o certbot no
 > podrá emitir los certificados.
 
 ## 2. Acceso seguro por SSH (clave, no contraseña)
@@ -66,7 +66,9 @@ docker compose -f docker-compose.prod.yml ps
 ```
 
 - La API corre `prisma migrate deploy` sola al arrancar (crea el schema).
-- Caddy emite los certificados HTTPS automáticamente al primer acceso.
+- El HTTPS lo maneja el **nginx del host** con **certbot** (Let's Encrypt). El certificado
+  cubre `remerasdelarea.com`, `www`, `api` y `admin`, y lo renueva `certbot.timer` sin
+  intervención. No se usa Caddy: nginx ya es dueño de 80/443.
 
 ## 7. Crear el usuario OWNER del panel
 

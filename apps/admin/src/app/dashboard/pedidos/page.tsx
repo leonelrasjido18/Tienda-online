@@ -22,10 +22,12 @@ import {
   type OrderSummaryDto,
 } from '@tienda/shared';
 import { useQuery } from '@tanstack/react-query';
+import { Eye } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import { useApi } from '@/lib/use-api';
+import { OrderPreviewDialog } from './order-preview-dialog';
 
 interface OrderListResponse {
   items: OrderSummaryDto[];
@@ -58,6 +60,8 @@ export default function OrdersPage() {
   const api = useApi();
   const [q, setQ] = useState('');
   const [financialStatus, setFinancialStatus] = useState<OrderFinancialStatus | 'ALL'>('ALL');
+  // Vista rápida sin salir del listado: el detalle completo sigue en /pedidos/[id].
+  const [vistaPrevia, setVistaPrevia] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'orders', q, financialStatus],
@@ -104,19 +108,22 @@ export default function OrdersPage() {
               <TableHead>Estado de pago</TableHead>
               <TableHead>Total</TableHead>
               <TableHead>Fecha</TableHead>
+              <TableHead className="w-12">
+                <span className="sr-only">Ver detalle</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   Cargando…
                 </TableCell>
               </TableRow>
             )}
             {data?.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   Todavía no hay pedidos.
                 </TableCell>
               </TableRow>
@@ -144,11 +151,24 @@ export default function OrdersPage() {
                 <TableCell className="text-muted-foreground">
                   {new Date(order.createdAt).toLocaleDateString('es-AR')}
                 </TableCell>
+                <TableCell className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => setVistaPrevia(order.id)}
+                    title="Ver cliente y productos"
+                    aria-label={`Ver el pedido ${order.displayNumber}`}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      <OrderPreviewDialog orderId={vistaPrevia} onClose={() => setVistaPrevia(null)} />
     </div>
   );
 }

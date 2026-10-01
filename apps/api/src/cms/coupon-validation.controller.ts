@@ -5,14 +5,14 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  UsePipes,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { validateCouponSchema, type ValidateCouponInput } from '@tienda/shared';
+
 import { PrismaService } from '../prisma/prisma.service';
 import { Public } from '../auth/decorators/public.decorator';
-
-interface ValidateCouponInput {
-  code: string;
-  subtotalCents: number;
-}
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 
 @Controller('coupons')
 export class CouponValidationController {
@@ -23,8 +23,12 @@ export class CouponValidationController {
    * sin consumir el cupón (eso se hace al confirmar la orden).
    */
   @Public()
+  // Mas estricto que el limite global (100/min): este endpoint dice si un codigo
+  // existe, asi que sin freno propio sirve para tantear codigos de descuento.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('validate')
   @HttpCode(HttpStatus.OK)
+  @UsePipes(new ZodValidationPipe(validateCouponSchema))
   async validateCoupon(@Body() body: ValidateCouponInput) {
     const coupon = await this.prisma.coupon.findUnique({
       where: { code: body.code.toUpperCase().trim() },

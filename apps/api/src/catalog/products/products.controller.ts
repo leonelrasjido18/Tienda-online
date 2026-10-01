@@ -16,6 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import {
   aiNameProductSchema,
   bulkUpdateVariantsSchema,
+  quickVariantSetupSchema,
   replaceProductOptionsSchema,
   reorderProductImagesSchema,
   updateProductImageSchema,
@@ -23,6 +24,7 @@ import {
   upsertVariantSchema,
   type AiNameProductInput,
   type BulkUpdateVariantsInput,
+  type QuickVariantSetupInput,
   type ReplaceProductOptionsInput,
   type ReorderProductImagesInput,
   type UpdateProductImageInput,
@@ -97,6 +99,13 @@ export class ProductsController {
   @Post(':id/variants/generate')
   generateVariants(@Param('id') id: string) {
     return this.products.generateVariants(id);
+  }
+
+  /** Talles + manga + precios en una sola llamada (botón "Generar todo" del panel). */
+  @Post(':id/variants/quick-setup')
+  @UsePipes(new ZodValidationPipe(quickVariantSetupSchema))
+  quickVariantSetup(@Param('id') id: string, @Body() body: QuickVariantSetupInput) {
+    return this.products.quickVariantSetup(id, body);
   }
 
   @Post(':id/variants/bulk')

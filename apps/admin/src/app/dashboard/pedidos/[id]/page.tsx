@@ -3,7 +3,9 @@
 import { Badge, Button } from '@tienda/ui';
 import { formatCentsAsArs, type OrderDetailDto } from '@tienda/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Mail } from 'lucide-react';
 import { useParams } from 'next/navigation';
+import { useState } from 'react';
 
 import { resolveImageUrl } from '@/lib/media';
 import { useApi } from '@/lib/use-api';
@@ -43,6 +45,21 @@ export default function OrderDetailPage() {
     queryFn: () => api<OrderDetailDto>(`/admin/orders/${params.id}`),
   });
 
+  const [avisoCorreo, setAvisoCorreo] = useState<string | null>(null);
+
+  // Reenvío de la confirmación: hace falta cuando el correo no salió (SMTP
+  // caído) o cuando se corrigió un pedido a mano.
+  const resendConfirmation = useMutation({
+    mutationFn: () =>
+      api<{ sentTo: string }>(`/admin/orders/${params.id}/resend-confirmation`, { method: 'POST' }),
+    onSuccess: (r) => {
+      setAvisoCorreo(`Confirmación enviada a ${r.sentTo}`);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'orders', params.id] });
+    },
+    onError: (err) =>
+      setAvisoCorreo(err instanceof Error ? err.message : 'No se pudo reenviar la confirmación'),
+  });
+
   const approveTransfer = useMutation({
     mutationFn: (paymentId: string) =>
       api<OrderDetailDto>(`/admin/orders/${params.id}/payments/${paymentId}/approve-transfer`, { method: 'POST' }),
@@ -78,7 +95,22 @@ export default function OrderDetailPage() {
             {order.contactPhone ? ` · ${order.contactPhone}` : ''}
           </p>
         </div>
-        <Badge>{FINANCIAL_STATUS_LABELS[order.financialStatus]}</Badge>
+        <div className="flex flex-col items-end gap-2">
+          <Badge>{FINANCIAL_STATUS_LABELS[order.financialStatus]}</Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setAvisoCorreo(null);
+              resendConfirmation.mutate();
+            }}
+            disabled={resendConfirmation.isPending}
+          >
+            <Mail className="mr-2 h-3.5 w-3.5" />
+            {resendConfirmation.isPending ? 'Enviando…' : 'Reenviar confirmación'}
+          </Button>
+          {avisoCorreo && <p className="max-w-xs text-right text-xs text-muted-foreground">{avisoCorreo}</p>}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -186,16 +218,20 @@ export default function OrderDetailPage() {
                     {payment.provider === 'bank_transfer' ? 'Transferencia bancaria' : 'Mercado Pago'} ·{' '}
                     {formatCentsAsArs(payment.amountCents)}
                   </p>
-                  {payment.provider === 'bank_transfer' && payment.status === 'PENDING' && (
-                    <Button
-                      size="sm"
-                      className="mt-2 w-full"
-                      disabled={approveTransfer.isPending}
-                      onClick={() => approveTransfer.mutate(payment.id)}
-                    >
-                      Aprobar transferencia
-                    </Button>
-                  )}
+                  {/* Transferencia y efectivo se confirman a mano. Antes el
+                      botón sólo salía en transferencia, así que un pedido en
+                      efectivo no se podía marcar como cobrado. */}
+                  {(payment.provider === 'bank_transfer' || payment.provider === 'cash') &&
+                    payment.status === 'PENDING' && (
+                      <Button
+                        size="sm"
+                        className="mt-2 w-full"
+                        disabled={approveTransfer.isPending}
+                        onClick={() => approveTransfer.mutate(payment.id)}
+                      >
+                        {payment.provider === 'cash' ? 'Marcar efectivo como cobrado' : 'Aprobar transferencia'}
+                      </Button>
+                    )}
                 </div>
               ))}
             </div>

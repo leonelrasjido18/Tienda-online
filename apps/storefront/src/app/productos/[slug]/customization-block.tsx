@@ -2,8 +2,10 @@
 
 import {
   buildCustomizationInputSchema,
+  calculateCustomizationExtraCents,
   computeFontSizeForBox,
   formatCentsAsArs,
+  personalizationBaseCents,
   resolvePrintArea,
   type ProductCustomizationDto,
 } from '@tienda/shared';
@@ -34,6 +36,13 @@ export function CustomizationBlock({
   const [playerName, setPlayerName] = useState('');
   const [playerNumber, setPlayerNumber] = useState('');
   const [patchIds, setPatchIds] = useState<string[]>([]);
+
+  // Precio único de personalizar: nombre, dorsal o los dos cuestan lo mismo.
+  const precioPersonalizacion = personalizationBaseCents({
+    nameExtraCents: customization.nameExtraCents,
+    numberExtraCents: customization.numberExtraCents,
+    patchOptions: [],
+  });
   const [canvasHeight, setCanvasHeight] = useState(Math.round(CANVAS_WIDTH * 1.2));
 
   const schema = useMemo(
@@ -54,12 +63,21 @@ export function CustomizationBlock({
   });
 
   useEffect(() => {
-    let extraCents = 0;
-    if (customization.enableName && playerName) extraCents += customization.nameExtraCents;
-    if (customization.enableNumber && playerNumber) extraCents += customization.numberExtraCents;
-    for (const patch of customization.patches) {
-      if (patchIds.includes(patch.id)) extraCents += patch.priceCents;
-    }
+    // El mismo calculo que usa el servidor al cobrar: nombre y dorsal van
+    // juntos, una sola vez. Antes esto estaba escrito aparte y podia mostrar un
+    // precio distinto al que terminaba cobrando el checkout.
+    const extraCents = calculateCustomizationExtraCents(
+      {
+        playerName: customization.enableName ? playerName : undefined,
+        playerNumber: customization.enableNumber && playerNumber ? Number(playerNumber) : undefined,
+        patchIds,
+      },
+      {
+        nameExtraCents: customization.nameExtraCents,
+        numberExtraCents: customization.numberExtraCents,
+        patchOptions: customization.patches.map((p) => ({ patchId: p.id, patch: { priceCents: p.priceCents } })),
+      },
+    );
 
     onChange({
       playerName: parsed.success ? parsed.data.playerName : undefined,
@@ -142,9 +160,16 @@ export function CustomizationBlock({
         </svg>
       </div>
 
+      {(customization.enableName || customization.enableNumber) && precioPersonalizacion > 0 && (
+        <p className="rounded-md bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
+          Nombre y dorsal: <span className="font-semibold text-foreground">+{formatCentsAsArs(precioPersonalizacion)}</span>{' '}
+          — el precio es el mismo si ponés uno solo o los dos.
+        </p>
+      )}
+
       {customization.enableName && (
         <div className="space-y-1">
-          <Label htmlFor="playerName">Nombre {customization.nameExtraCents > 0 && `(+${formatCentsAsArs(customization.nameExtraCents)})`}</Label>
+          <Label htmlFor="playerName">Nombre</Label>
           <Input
             id="playerName"
             maxLength={customization.maxNameLength}
@@ -159,7 +184,6 @@ export function CustomizationBlock({
         <div className="space-y-1">
           <Label htmlFor="playerNumber">
             Dorsal ({customization.minNumber}-{customization.maxNumber})
-            {customization.numberExtraCents > 0 && ` (+${formatCentsAsArs(customization.numberExtraCents)})`}
           </Label>
           <Input
             id="playerNumber"

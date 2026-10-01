@@ -37,6 +37,7 @@ interface Coupon {
   value: number;
   minPurchaseCents: number;
   maxUses: number | null;
+  oncePerCustomer: boolean;
   uses: number;
   expiresAt: string | null;
   isActive: boolean;
@@ -71,6 +72,7 @@ export default function CouponsPage() {
   const [value, setValue] = useState('');
   const [minPurchaseCents, setMinPurchaseCents] = useState('0');
   const [maxUses, setMaxUses] = useState('');
+  const [oncePerCustomer, setOncePerCustomer] = useState(false);
   const [expiresAt, setExpiresAt] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +90,7 @@ export default function CouponsPage() {
         value: Number(value),
         minPurchaseCents: Number(minPurchaseCents),
         maxUses: maxUses ? Number(maxUses) : null,
+        oncePerCustomer,
         expiresAt: expiresAt || null,
         isActive,
       };
@@ -122,6 +125,7 @@ export default function CouponsPage() {
     setValue(String(coupon.value));
     setMinPurchaseCents(String(coupon.minPurchaseCents));
     setMaxUses(coupon.maxUses !== null ? String(coupon.maxUses) : '');
+    setOncePerCustomer(coupon.oncePerCustomer ?? false);
     setExpiresAt(coupon.expiresAt ? coupon.expiresAt.slice(0, 16) : '');
     setIsActive(coupon.isActive);
     setMode('edit');
@@ -139,6 +143,7 @@ export default function CouponsPage() {
     setValue('');
     setMinPurchaseCents('0');
     setMaxUses('');
+    setOncePerCustomer(false);
     setExpiresAt('');
     setIsActive(true);
     setEditingCoupon(null);
@@ -387,6 +392,22 @@ export default function CouponsPage() {
                 Cupón activo y utilizable
               </label>
             </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="oncePerCustomer"
+                checked={oncePerCustomer}
+                onChange={(e) => setOncePerCustomer(e.target.checked)}
+                className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+              />
+              <label htmlFor="oncePerCustomer" className="text-sm font-medium text-foreground select-none">
+                Un solo uso por cliente
+              </label>
+            </div>
+            <p className="-mt-2 text-xs text-muted-foreground">
+              Si se activa, el cliente tiene que iniciar sesión para poder aplicarlo.
+            </p>
 
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => setMode('list')} className="flex-1">

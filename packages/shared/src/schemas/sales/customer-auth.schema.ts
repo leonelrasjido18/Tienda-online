@@ -31,6 +31,14 @@ export const customerVerifyEmailSchema = z.object({
 });
 export type CustomerVerifyEmailInput = z.infer<typeof customerVerifyEmailSchema>;
 
+// Reenvío del código de verificación: el del registro dura 30 minutos y es
+// normal que el cliente lo pida de nuevo. Responde siempre igual, exista o no
+// la cuenta, por el mismo motivo que `customerRequestResetSchema`.
+export const customerResendVerificationSchema = z.object({
+  email: z.string().email(),
+});
+export type CustomerResendVerificationInput = z.infer<typeof customerResendVerificationSchema>;
+
 export const customerRequestResetSchema = z.object({
   email: z.string().email(),
 });
