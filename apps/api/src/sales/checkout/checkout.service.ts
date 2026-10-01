@@ -17,6 +17,7 @@ import {
   type ResolvedFulfillment,
   type CheckoutPaymentMethod,
   OFFLINE_PAYMENT_METHODS,
+  resolveFulfillment,
   shippingDueAtCheckout,
 } from '@tienda/shared';
 import type { Prisma } from '@prisma/client';
@@ -118,23 +119,19 @@ export class CheckoutService {
         const available = Math.max(0, (inv?.quantity ?? 0) - (inv?.reserved ?? 0));
         const allowPreorder = line.item.variant.inventory?.allowPreorder ?? false;
 
-        let resolved: ResolvedFulfillment;
-        if (product.fulfillmentMode === 'PREORDER') {
-          resolved = 'PREORDER';
-        } else if (product.fulfillmentMode === 'IN_STOCK') {
-          if (available < line.item.quantity) {
-            throw new ConflictException(`No hay stock suficiente de ${product.name}`);
-          }
-          resolved = 'IN_STOCK';
-        } else if (available >= line.item.quantity) {
-          resolved = 'IN_STOCK';
-        } else if (allowPreorder) {
-          resolved = 'PREORDER';
-        } else {
+        // La misma funcion que usan la ficha y el checkout de la tienda, para que
+        // lo que se promete en pantalla sea lo que se cobra.
+        const decision = resolveFulfillment({
+          fulfillmentMode: product.fulfillmentMode,
+          available,
+          quantity: line.item.quantity,
+          allowPreorder,
+        });
+        if (decision.kind === 'UNAVAILABLE') {
           throw new ConflictException(`No hay stock suficiente de ${product.name}`);
         }
 
-        return { line, resolved };
+        return { line, resolved: decision.kind satisfies ResolvedFulfillment };
       });
 
       await this.stock.reserve(

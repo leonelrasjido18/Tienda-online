@@ -2,6 +2,7 @@
 
 import {
   bestPaymentDiscount,
+  resolveFulfillment,
   formatCentsAsArs,
   PAYMENT_METHOD_LABELS,
   type ProductDetailDto,
@@ -483,7 +484,17 @@ function AvailabilityBadge({ product, variant }: { product: ProductDetailDto; va
     );
   }
 
-  if (variant.inventory.available > 0) {
+  // Se resuelve con la misma función que el checkout. Antes acá se miraba sólo el
+  // stock: un producto marcado "sólo por encargo" con una unidad suelta prometía
+  // entrega inmediata y después cobraba seña, sin envío.
+  const decision = resolveFulfillment({
+    fulfillmentMode: product.fulfillmentMode,
+    available: variant.inventory.available,
+    quantity: 1,
+    allowPreorder: variant.inventory.allowPreorder,
+  });
+
+  if (decision.kind === 'IN_STOCK') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
         <ShieldCheck className="h-3.5 w-3.5" /> Entrega Inmediata (Stock Local)
@@ -491,7 +502,7 @@ function AvailabilityBadge({ product, variant }: { product: ProductDetailDto; va
     );
   }
 
-  if (variant.inventory.allowPreorder) {
+  if (decision.kind === 'PREORDER') {
     const days = variant.inventory.preorderLeadDays ?? product.preorderLeadDays ?? 20;
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400">

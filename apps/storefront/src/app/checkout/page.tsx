@@ -2,15 +2,18 @@
 
 import {
   applyDiscountToPlan,
+  calculatePaymentDiscountCents,
   calculatePaymentPlan,
   formatCentsAsArs,
   normalizePostalCode,
+  resolvedFulfillmentOf,
+  resolvePaymentDiscount,
   shippingDueAtCheckout,
   PAYMENT_METHOD_LABELS,
   type CheckoutPaymentMethod,
   type CreateOrderResponse,
   type PublicStoreSettingsDto,
-  type ResolvedFulfillment,
+  type FulfillmentMode,
   type ShippingQuoteDto,
 } from '@tienda/shared';
 import { Button, Input, Label, Card, CardContent, Turnstile } from '@tienda/ui';
@@ -32,17 +35,6 @@ import { useCart } from '@/lib/cart-context';
 
 type Step = 'contact' | 'shipping' | 'payment';
 type ShippingMethod = 'pickup' | 'delivery';
-
-function resolveItemFulfillment(item: {
-  fulfillmentMode: string;
-  available: number;
-  quantity: number;
-  allowPreorder: boolean;
-}): ResolvedFulfillment {
-  if (item.fulfillmentMode === 'PREORDER') return 'PREORDER';
-  if (item.available >= item.quantity) return 'IN_STOCK';
-  return item.allowPreorder ? 'PREORDER' : 'IN_STOCK';
-}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -116,18 +108,46 @@ export default function CheckoutPage() {
     if (!cart) return null;
     const lines = cart.items.map((item) => ({
       totalCents: item.totalCents,
-      fulfillment: resolveItemFulfillment(item),
+      // Si no se puede comprar, el servidor lo rechaza igual al confirmar; para el
+      // resumen alcanza con tratarlo como encargo, que es la opcion conservadora.
+      fulfillment: resolvedFulfillmentOf({
+        fulfillmentMode: item.fulfillmentMode as FulfillmentMode,
+        available: item.available,
+        quantity: item.quantity,
+        allowPreorder: item.allowPreorder,
+      }) ?? 'PREORDER',
     }));
     return calculatePaymentPlan(lines, depositPercent);
   }, [cart, depositPercent]);
 
-  // El plan mostrado refleja el descuento del cupón. El servidor lo revalida y
+  /**
+   * Descuento por el medio de pago elegido (transferencia o efectivo).
+   *
+   * Se calcula igual que en el servidor: sobre lo que queda DESPUÉS del cupón, no
+   * sobre el precio de lista. La ficha del producto ya lo anunciaba, pero el
+   * resumen del checkout lo ignoraba, así que el cliente elegía "transferencia",
+   * veía el precio sin descuento y pagaba otro número.
+   */
+  const paymentDiscountCents = useMemo(() => {
+    if (!plan || !tienda) return 0;
+    const base = plan.subtotalCents - (appliedCoupon?.discountCents ?? 0);
+    return calculatePaymentDiscountCents(
+      base,
+      resolvePaymentDiscount(paymentMethod, {
+        bank_transfer: tienda.bankTransferDiscount,
+        cash: tienda.cashDiscount,
+      }),
+    );
+  }, [plan, tienda, appliedCoupon, paymentMethod]);
+
+  // El plan mostrado refleja los dos descuentos. El servidor los revalida y
   // recalcula igual al confirmar: esto es sólo la vista previa.
   const displayPlan = useMemo(() => {
     if (!plan) return null;
-    if (!appliedCoupon) return plan;
-    return applyDiscountToPlan(plan, appliedCoupon.discountCents, depositPercent);
-  }, [plan, appliedCoupon, depositPercent]);
+    const total = (appliedCoupon?.discountCents ?? 0) + paymentDiscountCents;
+    if (total <= 0) return plan;
+    return applyDiscountToPlan(plan, total, depositPercent);
+  }, [plan, appliedCoupon, paymentDiscountCents, depositPercent]);
 
   // Envío. Sólo se cobra ahora si todo el pedido sale con stock inmediato: lo
   // que viene por encargo se cotiza cuando llega el lote, junto con el saldo.
@@ -635,6 +655,13 @@ export default function CheckoutPage() {
                   <span className="font-semibold">
                     −{formatCentsAsArs(appliedCoupon.discountCents)}
                   </span>
+                </div>
+              )}
+
+              {paymentDiscountCents > 0 && (
+                <div className="flex justify-between text-sm text-accent">
+                  <span>Descuento por {PAYMENT_METHOD_LABELS[paymentMethod].toLowerCase()}</span>
+                  <span className="font-semibold">−{formatCentsAsArs(paymentDiscountCents)}</span>
                 </div>
               )}
 
