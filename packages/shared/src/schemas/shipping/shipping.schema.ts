@@ -10,17 +10,52 @@ import { moneyCentsSchema } from '../catalog/common.schema';
 export const SHIPPING_PROVIDERS = ['manual', 'andreani', 'correo_argentino'] as const;
 export type ShippingProviderName = (typeof SHIPPING_PROVIDERS)[number];
 
+/**
+ * Código postal de una tarifa. Vacío significa "toda la provincia", que es la
+ * red de seguridad; con un código cargado, esa localidad sale distinto.
+ * Se acepta tanto `1425` como el CPA `C1425ABC`: `pickShippingRate` normaliza.
+ */
+const ratePostalCodeSchema = z
+  .string()
+  .trim()
+  .max(8)
+  .default('')
+  .refine((v) => v === '' || /^\d{4}$/.test(v) || /^[A-Za-z]\d{4}[A-Za-z]{3}$/.test(v), {
+    message: 'Poné un código postal de 4 dígitos (1425) o el CPA completo (C1425ABC)',
+  });
+
 export const upsertShippingRateSchema = z.object({
   province: z.string().trim().min(2).max(120),
+  postalCode: ratePostalCodeSchema,
   priceCents: moneyCentsSchema,
   etaDays: z.number().int().min(0).max(120).nullish(),
   isActive: z.boolean().default(true),
 });
 export type UpsertShippingRateInput = z.infer<typeof upsertShippingRateSchema>;
 
+/**
+ * Carga de muchos códigos postales de una. Sin esto, cargar las tarifas de una
+ * provincia con excepciones por localidad es un formulario por fila.
+ */
+export const bulkShippingRatesSchema = z.object({
+  province: z.string().trim().min(2).max(120),
+  rates: z
+    .array(
+      z.object({
+        postalCode: ratePostalCodeSchema,
+        priceCents: moneyCentsSchema,
+        etaDays: z.number().int().min(0).max(120).nullish(),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+export type BulkShippingRatesInput = z.infer<typeof bulkShippingRatesSchema>;
+
 export const shippingRateSchema = z.object({
   id: z.string().uuid(),
   province: z.string(),
+  postalCode: z.string(),
   priceCents: z.number().int(),
   etaDays: z.number().int().nullable(),
   isActive: z.boolean(),

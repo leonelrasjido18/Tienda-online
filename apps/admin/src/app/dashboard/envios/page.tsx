@@ -20,6 +20,7 @@ import {
   AR_PROVINCES,
   formatCentsAsArs,
   parseArsToCents,
+  parseBulkShippingRates,
   type ObservedShippingRateDto,
   type ShippingRateDto,
 } from '@tienda/shared';
@@ -33,9 +34,16 @@ export default function ShippingRatesPage() {
   const api = useApi();
   const queryClient = useQueryClient();
   const [province, setProvince] = useState<string>(AR_PROVINCES[0]);
+  const [postalCode, setPostalCode] = useState('');
   const [priceText, setPriceText] = useState('');
   const [etaDays, setEtaDays] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Carga en lote: una línea por código postal, pegada desde una planilla.
+  const [bulkProvince, setBulkProvince] = useState<string>(AR_PROVINCES[0]);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkResult, setBulkResult] = useState<string | null>(null);
 
   const { data: rates, isLoading } = useQuery({
     queryKey: ['admin', 'shipping-rates'],
@@ -56,7 +64,7 @@ export default function ShippingRatesPage() {
     mutationFn: (row: ObservedShippingRateDto) =>
       api('/admin/shipping/rates', {
         method: 'PUT',
-        body: JSON.stringify({ province: row.province, priceCents: row.avgCents, etaDays: null }),
+        body: JSON.stringify({ province: row.province, postalCode: '', priceCents: row.avgCents, etaDays: null }),
       }),
     onSuccess: invalidate,
   });
@@ -73,6 +81,7 @@ export default function ShippingRatesPage() {
         method: 'PUT',
         body: JSON.stringify({
           province,
+          postalCode: postalCode.trim(),
           priceCents,
           etaDays: etaDays ? Number(etaDays) : null,
           isActive: true,
@@ -81,12 +90,43 @@ export default function ShippingRatesPage() {
     },
     onSuccess: () => {
       setError(null);
+      setPostalCode('');
       setPriceText('');
       setEtaDays('');
       invalidate();
     },
     onError: (err) =>
       setError(err instanceof ApiError ? err.message : 'El precio tiene que ser un número.'),
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: () => {
+      const { rates, errors } = parseBulkShippingRates(bulkText);
+      if (errors.length > 0) {
+        // Se muestran todas las filas con problema de una, no la primera nada más:
+        // corregirlas de a una tras otra corrida sería desesperante.
+        const detalle = errors.map((e) => `  ${e.line}: ${e.text} — ${e.reason}`).join('\n');
+        throw new Error(`Revisá estas líneas:\n${detalle}`);
+      }
+      if (rates.length === 0) throw new Error('No hay ninguna línea para cargar.');
+      return api<{ cargadas: number; repetidas: number }>('/admin/shipping/rates/bulk', {
+        method: 'PUT',
+        body: JSON.stringify({ province: bulkProvince, rates }),
+      });
+    },
+    onSuccess: (r) => {
+      setBulkError(null);
+      setBulkResult(
+        `Listo: ${r.cargadas} código${r.cargadas === 1 ? '' : 's'} postal${r.cargadas === 1 ? '' : 'es'} en ${bulkProvince}` +
+          (r.repetidas > 0 ? ` (${r.repetidas} repetido${r.repetidas === 1 ? '' : 's'}, quedó el último).` : '.'),
+      );
+      setBulkText('');
+      invalidate();
+    },
+    onError: (err) => {
+      setBulkResult(null);
+      setBulkError(err instanceof ApiError ? err.message : (err as Error).message);
+    },
   });
 
   const deleteMutation = useMutation({
@@ -105,7 +145,7 @@ export default function ShippingRatesPage() {
       <div className="mt-6 rounded-lg border border-border bg-background p-4">
         <h2 className="mb-3 text-sm font-semibold">Agregar o actualizar</h2>
         <form
-          className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px_120px_auto] sm:items-end"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_130px_130px_90px_auto] sm:items-end"
           onSubmit={(e) => {
             e.preventDefault();
             saveMutation.mutate();
@@ -125,6 +165,15 @@ export default function ShippingRatesPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cp">Código postal</Label>
+            <Input
+              id="cp"
+              placeholder="Toda la provincia"
+              value={postalCode}
+              onChange={(e) => setPostalCode(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="price">Precio (ARS)</Label>
@@ -155,11 +204,58 @@ export default function ShippingRatesPage() {
         {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
       </div>
 
+      <div className="mt-6 rounded-lg border border-border bg-background p-4">
+        <h2 className="text-sm font-semibold">Cargar muchos códigos postales de una</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Una línea por código postal: <span className="font-mono">código, precio, días</span>. Los
+          días son opcionales. Se puede pegar directo desde una planilla.
+        </p>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="space-y-1.5">
+            <Label>Provincia a la que pertenecen</Label>
+            <Select value={bulkProvince} onValueChange={setBulkProvince}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AR_PROVINCES.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            onClick={() => bulkMutation.mutate()}
+            disabled={bulkMutation.isPending || bulkText.trim() === ''}
+          >
+            {bulkMutation.isPending ? 'Cargando…' : 'Cargar todos'}
+          </Button>
+        </div>
+
+        <textarea
+          className="mt-3 h-36 w-full rounded-md border border-border bg-background p-3 font-mono text-xs"
+          placeholder={'1425, 4500, 3\n1426, 4500, 3\n7600, 7200'}
+          value={bulkText}
+          onChange={(e) => {
+            setBulkText(e.target.value);
+            setBulkError(null);
+            setBulkResult(null);
+          }}
+        />
+
+        {bulkError && <p className="mt-2 text-sm text-destructive">{bulkError}</p>}
+        {bulkResult && <p className="mt-2 text-sm font-medium text-primary">{bulkResult}</p>}
+      </div>
+
       <div className="mt-6 rounded-lg border border-border bg-background">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Provincia</TableHead>
+              <TableHead>Código postal</TableHead>
               <TableHead>Precio</TableHead>
               <TableHead>Demora</TableHead>
               <TableHead className="w-24" />
@@ -168,14 +264,14 @@ export default function ShippingRatesPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   Cargando…
                 </TableCell>
               </TableRow>
             )}
             {rates?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   Sin tarifas cargadas. Los envíos van a cotizar $0 hasta que agregues al menos una.
                 </TableCell>
               </TableRow>
@@ -183,6 +279,13 @@ export default function ShippingRatesPage() {
             {rates?.map((rate) => (
               <TableRow key={rate.id}>
                 <TableCell className="font-medium">{rate.province}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {rate.postalCode ? (
+                    <span className="font-mono text-xs">{rate.postalCode}</span>
+                  ) : (
+                    <span className="text-xs">Toda la provincia</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {formatCentsAsArs(rate.priceCents)}
                 </TableCell>
@@ -195,7 +298,8 @@ export default function ShippingRatesPage() {
                     size="sm"
                     className="text-destructive"
                     onClick={() => {
-                      if (confirm(`¿Eliminar la tarifa de ${rate.province}?`))
+                      const que = rate.postalCode ? `${rate.province} (CP ${rate.postalCode})` : rate.province;
+                      if (confirm(`¿Eliminar la tarifa de ${que}?`))
                         deleteMutation.mutate(rate.id);
                     }}
                   >

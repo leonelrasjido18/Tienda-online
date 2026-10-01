@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { CustomizationModule } from '../../catalog/customization/customization.module';
 import { UploadsModule } from '../../catalog/uploads/uploads.module';
 import { TurnstileModule } from '../../common/turnstile/turnstile.module';
+import { ShippingModule } from '../../shipping/shipping.module';
 import { CartModule } from '../cart/cart.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -24,6 +25,7 @@ import { CheckoutService } from './checkout.service';
     PaymentsModule,
     NotificationsModule,
     TurnstileModule,
+    ShippingModule,
   ],
   controllers: [CheckoutController],
   providers: [CheckoutService],

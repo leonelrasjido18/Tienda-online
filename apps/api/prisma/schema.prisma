@@ -1001,8 +1001,11 @@ model PaymentLink {
 model ShippingRate {
   id         String  @id @default(uuid())
   /// Nombre de provincia tal como se guarda en Order.shippingProvince.
-  province   String  @unique
-  /// Costo base del envío a esa provincia.
+  province   String
+  /// Código postal puntual dentro de la provincia; vacío = toda la provincia.
+  /// El más específico gana (ver pickShippingRate en @tienda/shared).
+  postalCode String  @default("")
+  /// Costo base del envío a ese destino.
   priceCents Int
   /// Días hábiles estimados de entrega, para comunicarle al cliente.
   etaDays    Int?
@@ -1011,6 +1014,8 @@ model ShippingRate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([province, postalCode])
+  @@index([postalCode])
   @@map("shipping_rates")
 }
 

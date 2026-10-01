@@ -291,7 +291,7 @@ async function seedShippingRates() {
 
   for (const rate of provinces) {
     await prisma.shippingRate.upsert({
-      where: { province: rate.province },
+      where: { province_postalCode: { province: rate.province, postalCode: '' } },
       update: {},
       create: {
         province: rate.province,

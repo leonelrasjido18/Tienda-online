@@ -17,6 +17,7 @@ import {
   type ResolvedFulfillment,
   type CheckoutPaymentMethod,
   OFFLINE_PAYMENT_METHODS,
+  shippingDueAtCheckout,
 } from '@tienda/shared';
 import type { Prisma } from '@prisma/client';
 import type { Queue } from 'bullmq';
@@ -32,6 +33,7 @@ import type { Env } from '../../config/env.validation';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PushService } from '../notifications/push.service';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
+import { ShippingService } from '../../shipping/shipping.service';
 import { SettingsService } from '../settings/settings.service';
 import { STOCK_RESERVATION_QUEUE, type StockReservationJobData } from '../stock/reservation-queue.constants';
 import { StockReservationService } from '../stock/stock-reservation.service';
@@ -70,6 +72,7 @@ export class CheckoutService {
     private readonly uploads: UploadsService,
     private readonly payments: PaymentProviderRegistry,
     private readonly push: PushService,
+    private readonly shipping: ShippingService,
     private readonly config: ConfigService<Env, true>,
     @InjectQueue(STOCK_RESERVATION_QUEUE) private readonly reservationQueue: Queue<StockReservationJobData>,
   ) {}
@@ -151,11 +154,13 @@ export class CheckoutService {
       // recalculado acá. Nunca se confía en el descuento que pudo mostrar el cliente.
       let couponId: string | null = null;
       let discountCents = 0;
+      let envioGratisPorCupon = false;
       let effectivePlan = plan;
       if (input.couponCode) {
         const applied = await this.resolveAndConsumeCoupon(tx, input.couponCode, plan.subtotalCents, customerId);
         couponId = applied.couponId;
         discountCents = applied.discountCents;
+        envioGratisPorCupon = applied.freeShipping;
         effectivePlan = applyDiscountToPlan(plan, discountCents, storeSettings.defaultDepositPercent);
       }
       // Descuento por el medio de pago (transferencia o efectivo). Se calcula
@@ -174,7 +179,34 @@ export class CheckoutService {
         );
       }
 
-      const netTotalCents = baseParaMedioDePago - paymentDiscountCents;
+      // Envío. Se cotiza del lado del servidor aunque la tienda ya lo haya
+      // mostrado: el precio que llega del navegador no se mira nunca.
+      //
+      // Hasta acá el envío a domicilio de un pedido con stock inmediato salía
+      // gratis — el checkout guardaba la dirección y nada más, y shippingCents
+      // sólo se escribía al cobrar el saldo de un encargo. Con tarifas de hasta
+      // $10.000 cargadas, cada venta de stock se iba con el envío regalado.
+      const envio = input.shipping.method === 'delivery' ? input.shipping : null;
+      let shippingCents: number | null = null;
+      if (envio && shippingDueAtCheckout(effectivePlan.plan, { pickupInStore: false })) {
+        const quote = await this.shipping.quoteForItems(
+          {
+            postalCode: envio.postalCode,
+            province: envio.province,
+            city: envio.city,
+          },
+          resolutions.map(({ line }) => ({
+            quantity: line.item.quantity,
+            priceCents: line.item.variant.priceCents,
+            weightGrams: line.item.variant.weightGrams,
+          })),
+        );
+        // Un cupón de envío gratis se resuelve acá, que es donde por fin hay un
+        // envío que descontar.
+        shippingCents = envioGratisPorCupon ? 0 : quote.priceCents;
+      }
+
+      const netTotalCents = baseParaMedioDePago - paymentDiscountCents + (shippingCents ?? 0);
 
       // Los métodos offline dan más tiempo: el cliente va al banco o paga al retirar.
       const reservationMinutes =
@@ -212,6 +244,7 @@ export class CheckoutService {
           couponId,
           depositCents: effectivePlan.depositCents,
           balanceCents: effectivePlan.balanceCents,
+          shippingCents,
           totalCents: netTotalCents,
           notes: input.notes ?? null,
           expiresAt,
@@ -460,7 +493,7 @@ export class CheckoutService {
     code: string,
     subtotalCents: number,
     customerId: string | null,
-  ): Promise<{ couponId: string; discountCents: number }> {
+  ): Promise<{ couponId: string; discountCents: number; freeShipping: boolean }> {
     const normalized = code.toUpperCase().trim();
     const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM coupons WHERE code = ${normalized} FOR UPDATE`;
     const row = locked[0];
@@ -505,6 +538,7 @@ export class CheckoutService {
         discountCents = Math.min(coupon.value, subtotalCents);
         break;
       case 'FREE_SHIPPING':
+        // No toca el subtotal: se descuenta sobre el envío, más abajo.
         discountCents = 0;
         break;
     }
@@ -514,7 +548,7 @@ export class CheckoutService {
     discountCents = Math.min(discountCents, subtotalCents);
 
     await tx.coupon.update({ where: { id: coupon.id }, data: { uses: { increment: 1 } } });
-    return { couponId: coupon.id, discountCents };
+    return { couponId: coupon.id, discountCents, freeShipping: coupon.type === 'FREE_SHIPPING' };
   }
 
   private async prepareLines(items: CartItemWithRelations[]): Promise<PreparedLine[]> {

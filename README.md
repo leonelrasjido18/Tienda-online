@@ -90,8 +90,18 @@ seña + saldo.**
 | `FULL` | Todo con stock inmediato | El total |
 | `DEPOSIT_BALANCE` | Hay al menos un encargo | Sólo la seña (un % configurable) |
 
-El envío **nunca** entra en la seña: se cotiza recién cuando el lote llega, porque hasta
-entonces no se sabe el peso ni el destino final.
+**Cuándo se cobra el envío** lo decide `shippingDueAtCheckout()` de
+[shipping-rate.ts](packages/shared/src/lib/shipping-rate.ts), y la usan tanto el checkout de la
+API, para cobrar, como la tienda, para mostrar el resumen:
+
+| Caso | Envío |
+|---|---|
+| Retiro en el local | No se cobra |
+| Todo con stock inmediato | Se cotiza y se cobra en el checkout |
+| Hay al menos un encargo | Se cotiza cuando llega el lote, junto con el saldo |
+
+El envío **nunca** entra en la seña: hasta que el lote no llega no se sabe el peso ni el destino
+final, así que cotizarlo con meses de anticipación sería adivinar.
 
 Los estados reflejan eso, y están en
 [order.schema.ts](packages/shared/src/schemas/sales/order.schema.ts):
@@ -205,8 +215,10 @@ Preguntale esto antes de empezar, porque cambia el código:
 - ¿Hay personalización de la prenda? Si no, `catalog/customization/` queda sin usar.
 - ¿Qué porcentaje de seña?
 - ¿Qué pasarela: Mercado Pago o Ualá Bis? (es una variable de entorno, ver 5.7)
-- ¿Cotiza envíos por API (Andreani / Correo Argentino) o con una tabla de tarifas por provincia
-  cargada a mano? El modo manual no depende de nadie y es el que menos problemas da.
+- ¿Cotiza envíos por API (Andreani / Correo Argentino) o con la tabla de tarifas cargada a mano?
+  El modo manual no depende de nadie y es el que menos problemas da. La tabla admite una tarifa
+  por provincia y, cuando una localidad sale distinto, una por código postal: gana la más
+  específica (`pickShippingRate`). El panel carga códigos postales de a uno o pegando una lista.
 - ¿Ofrece descuento por transferencia o efectivo? Se configura en el panel, no en código.
 
 ### 4.3 Qué conseguir del cliente
@@ -495,12 +507,6 @@ Lo que falta, para no prometer lo que no está:
 
 - **Turnstile está desactivado** mientras no haya claves reales (ver capítulo 6). Es lo más
   urgente de cualquier instalación nueva.
-- **El envío se cobra únicamente en la etapa del saldo.** `Order.shippingCents` lo escribe sólo
-  [balance.service.ts](apps/api/src/import/balance.service.ts); el checkout guarda la dirección
-  pero no cobra envío. Para un pedido de stock inmediato eso significa que **el envío no se cobra
-  en ningún momento**, y que un cupón de envío gratis no descuenta nada ahí porque no hay nada
-  que descontar. En el flujo por encargo sí se honra (`balance.service.ts:116`). Si el cliente
-  nuevo vende sólo stock inmediato y quiere cobrar envío, **esto hay que implementarlo**.
 - La cotización por API de **Andreani** y **Correo Argentino** está implementada pero no probada
   con credenciales reales. El modo manual sí funciona en producción.
 - **Observabilidad**: no hay Sentry ni logs estructurados con request id. `/health` verifica

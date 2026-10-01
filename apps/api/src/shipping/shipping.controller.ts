@@ -1,5 +1,10 @@
 import { Body, Controller, Delete, Get, Param, Put, UsePipes } from '@nestjs/common';
-import { upsertShippingRateSchema, type UpsertShippingRateInput } from '@tienda/shared';
+import {
+  bulkShippingRatesSchema,
+  upsertShippingRateSchema,
+  type BulkShippingRatesInput,
+  type UpsertShippingRateInput,
+} from '@tienda/shared';
 
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -26,6 +31,13 @@ export class ShippingController {
   @UsePipes(new ZodValidationPipe(upsertShippingRateSchema))
   upsert(@Body() body: UpsertShippingRateInput) {
     return this.shipping.upsertRate(body);
+  }
+
+  /** Muchos códigos postales de una provincia en una sola pasada. */
+  @Put('bulk')
+  @UsePipes(new ZodValidationPipe(bulkShippingRatesSchema))
+  upsertBulk(@Body() body: BulkShippingRatesInput) {
+    return this.shipping.upsertRatesBulk(body);
   }
 
   @Delete(':id')

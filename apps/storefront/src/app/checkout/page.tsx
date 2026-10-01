@@ -4,11 +4,14 @@ import {
   applyDiscountToPlan,
   calculatePaymentPlan,
   formatCentsAsArs,
+  normalizePostalCode,
+  shippingDueAtCheckout,
   PAYMENT_METHOD_LABELS,
   type CheckoutPaymentMethod,
   type CreateOrderResponse,
   type PublicStoreSettingsDto,
   type ResolvedFulfillment,
+  type ShippingQuoteDto,
 } from '@tienda/shared';
 import { Button, Input, Label, Card, CardContent, Turnstile } from '@tienda/ui';
 import { useRouter } from 'next/navigation';
@@ -60,6 +63,14 @@ export default function CheckoutPage() {
   const [province, setProvince] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
+
+  /** Cotización del envío en vivo. Es una vista previa: el servidor la recalcula al confirmar. */
+  const [envio, setEnvio] = useState<
+    | { cp: string; estado: 'cargando' }
+    | { cp: string; estado: 'listo'; quote: ShippingQuoteDto }
+    | { cp: string; estado: 'error' }
+    | null
+  >(null);
 
   // La transferencia siempre está disponible, así que sirve de valor inicial
   // seguro hasta que el servidor diga qué pasarela está activa.
@@ -117,6 +128,58 @@ export default function CheckoutPage() {
     if (!appliedCoupon) return plan;
     return applyDiscountToPlan(plan, appliedCoupon.discountCents, depositPercent);
   }, [plan, appliedCoupon, depositPercent]);
+
+  // Envío. Sólo se cobra ahora si todo el pedido sale con stock inmediato: lo
+  // que viene por encargo se cotiza cuando llega el lote, junto con el saldo.
+  const cobraEnvioAhora =
+    displayPlan !== null &&
+    shippingDueAtCheckout(displayPlan.plan, { pickupInStore: shippingMethod === 'pickup' });
+
+  const cpNormalizado = normalizePostalCode(postalCode);
+
+  /**
+   * Cada cotización recuerda de qué código postal es, y abajo sólo se muestra la
+   * del que está escrito ahora. Así no hace falta limpiar el estado al cambiar de
+   * CP — que además de disparar renders en cascada, dejaba ver por un instante el
+   * precio del CP anterior.
+   */
+  const envioActual = envio !== null && envio.cp === cpNormalizado ? envio : null;
+
+  useEffect(() => {
+    if (!cobraEnvioAhora || !cpNormalizado) return;
+
+    let cancelado = false;
+    // Medio segundo de espera: si no, cada tecla del código postal dispara una
+    // cotización y la última en volver puede no ser la del CP que quedó escrito.
+    const id = setTimeout(async () => {
+      if (cancelado) return;
+      setEnvio({ cp: cpNormalizado, estado: 'cargando' });
+      try {
+        const q = await clientFetch<ShippingQuoteDto>('/shipping/quote', {
+          method: 'POST',
+          body: JSON.stringify({ postalCode: cpNormalizado, province: province || null, city: city || null }),
+        });
+        if (!cancelado) setEnvio({ cp: cpNormalizado, estado: 'listo', quote: q });
+      } catch {
+        // Que no se pueda cotizar no bloquea la compra: el servidor vuelve a
+        // calcularlo al confirmar y es ese número el que se cobra.
+        if (!cancelado) setEnvio({ cp: cpNormalizado, estado: 'error' });
+      }
+    }, 500);
+
+    return () => {
+      cancelado = true;
+      clearTimeout(id);
+    };
+  }, [cobraEnvioAhora, cpNormalizado, province, city]);
+
+  const envioCents = appliedCoupon?.freeShipping
+    ? 0
+    : envioActual?.estado === 'listo'
+      ? envioActual.quote.priceCents
+      : 0;
+
+  const totalHoyCents = (displayPlan?.dueTodayCents ?? 0) + (cobraEnvioAhora ? envioCents : 0);
 
   if (isLoading) {
     return (
@@ -575,6 +638,36 @@ export default function CheckoutPage() {
                 </div>
               )}
 
+              {cobraEnvioAhora && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Envío a domicilio
+                    {envioActual?.estado === 'listo' && envioActual.quote.etaDays !== null && (
+                      <span className="ml-1 text-xs">(llega en ~{envioActual.quote.etaDays} días hábiles)</span>
+                    )}
+                  </span>
+                  <span className="font-semibold">
+                    {appliedCoupon?.freeShipping ? (
+                      <span className="text-accent">Gratis</span>
+                    ) : !cpNormalizado ? (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        Poné tu código postal
+                      </span>
+                    ) : envioActual?.estado === 'cargando' ? (
+                      <span className="text-xs font-normal text-muted-foreground animate-pulse">
+                        Calculando…
+                      </span>
+                    ) : envioActual?.estado === 'error' ? (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        Te lo confirmamos al despachar
+                      </span>
+                    ) : (
+                      formatCentsAsArs(envioCents)
+                    )}
+                  </span>
+                </div>
+              )}
+
               {displayPlan.plan === 'DEPOSIT_BALANCE' ? (
                 <>
                   <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border">
@@ -596,7 +689,7 @@ export default function CheckoutPage() {
               ) : (
                 <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border">
                   <span>Total a abonar hoy</span>
-                  <span>{formatCentsAsArs(displayPlan.dueTodayCents)}</span>
+                  <span>{formatCentsAsArs(totalHoyCents)}</span>
                 </div>
               )}
             </div>

@@ -7,6 +7,8 @@ export * from './lib/customization-layout';
 export * from './lib/customization-price';
 export * from './lib/payment-discount';
 export * from './lib/payment-plan';
+export * from './lib/postal-code';
+export * from './lib/shipping-rate';
 
 export * from './schemas/catalog/common.schema';
 export * from './schemas/catalog/league.schema';

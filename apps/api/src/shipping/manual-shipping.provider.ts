@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { ShippingQuoteDto } from '@tienda/shared';
+import { normalizePostalCode, pickShippingRate, type ShippingQuoteDto } from '@tienda/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import type { ShippingProvider, ShippingQuoteRequest } from './shipping-provider.interface';
@@ -8,7 +8,8 @@ import type { ShippingProvider, ShippingQuoteRequest } from './shipping-provider
 const FALLBACK_PRICE_CENTS = 0;
 
 /**
- * Cotización por tabla de tarifas por provincia, cargada desde el panel.
+ * Cotización por la tabla de tarifas cargada desde el panel: por provincia, y
+ * por código postal cuando una localidad sale distinto que el resto.
  * Es el proveedor por defecto: no depende de ninguna API externa, así que la
  * tienda puede cobrar el saldo aunque el correo esté caído o sin credenciales.
  */
@@ -20,26 +21,45 @@ export class ManualShippingProvider implements ShippingProvider {
   constructor(private readonly prisma: PrismaService) {}
 
   async quote(request: ShippingQuoteRequest): Promise<ShippingQuoteDto> {
-    if (!request.province) {
+    if (!request.province && !request.postalCode) {
       return {
         provider: 'manual',
         priceCents: FALLBACK_PRICE_CENTS,
         etaDays: null,
-        fallbackReason: 'El pedido no tiene provincia cargada',
+        fallbackReason: 'El pedido no tiene provincia ni código postal',
       };
     }
 
-    const rate = await this.prisma.shippingRate.findFirst({
-      where: { province: { equals: request.province, mode: 'insensitive' }, isActive: true },
+    // Se traen las candidatas y decide `pickShippingRate`, que es puro y está
+    // probado. Filtrar acá en SQL obligaría a normalizar códigos postales en la
+    // base (el CPA "C1425ABC" y "1425" son el mismo destino) y la regla de qué
+    // tarifa gana quedaría escrita en dos lugares.
+    const cp = normalizePostalCode(request.postalCode);
+    const candidatas = await this.prisma.shippingRate.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          ...(request.province
+            ? [{ postalCode: '', province: { equals: request.province, mode: 'insensitive' as const } }]
+            : []),
+          ...(cp ? [{ postalCode: { not: '' } }] : []),
+        ],
+      },
+    });
+
+    const rate = pickShippingRate(candidatas, {
+      postalCode: request.postalCode,
+      province: request.province,
     });
 
     if (!rate) {
-      this.logger.warn(`Sin tarifa para "${request.province}": queda en 0 para ajustar a mano`);
+      const destino = request.postalCode ?? request.province ?? 'destino desconocido';
+      this.logger.warn(`Sin tarifa para "${destino}": queda en 0 para ajustar a mano`);
       return {
         provider: 'manual',
         priceCents: FALLBACK_PRICE_CENTS,
         etaDays: null,
-        fallbackReason: `No hay tarifa cargada para ${request.province}`,
+        fallbackReason: `No hay tarifa cargada para ${destino}`,
       };
     }
 
