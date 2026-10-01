@@ -51,7 +51,11 @@ export default async function RootLayout({ children }: LayoutProps<'/'>) {
           <FavoritosProvider>
           <PreorderBanner window={preorderWindow} />
           <SiteHeader />
-          <main className="flex-1">{children}</main>
+          {/* `overflow-x-clip` y no `hidden`: corta el desborde lateral sin crear
+              un contenedor de scroll, así la galería de la ficha puede seguir
+              quedándose fija (`sticky`) al bajar. Es una red de seguridad para que
+              una fila ancha no haga que todo el sitio se corra en el celular. */}
+          <main className="flex-1 overflow-x-clip">{children}</main>
           <SiteFooter />
           </FavoritosProvider>
         </CartProvider>

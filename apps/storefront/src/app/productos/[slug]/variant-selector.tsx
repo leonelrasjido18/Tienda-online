@@ -435,7 +435,7 @@ export function VariantSelector({
         {/* Modalidad: sólo si el producto realmente se puede comprar de las dos formas. */}
         {hayQueElegirModalidad && (
           <div className="mt-6">
-            <span className="mb-2 block text-sm font-semibold text-foreground">
+            <span className="mb-1.5 block text-sm font-semibold text-foreground">
               ¿Cómo lo querés?
             </span>
             <div className="grid grid-cols-2 gap-2">
@@ -443,18 +443,18 @@ export function VariantSelector({
                 type="button"
                 onClick={() => cambiarModalidad('stock')}
                 className={
-                  'rounded-lg border p-3 text-left transition-all ' +
+                  'min-w-0 rounded-lg border px-3 py-2 text-left transition-all ' +
                   (modalidad === 'stock'
                     ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500'
                     : 'border-input bg-background hover:bg-secondary')
                 }
               >
                 <span className="flex items-center gap-1.5 text-sm font-bold text-foreground">
-                  <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   Stock inmediato
                 </span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Lo tenemos acá. Pagás el total y se envía.
+                <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                  Lo tenemos acá, pagás el total.
                 </span>
               </button>
 
@@ -462,18 +462,18 @@ export function VariantSelector({
                 type="button"
                 onClick={() => cambiarModalidad('encargo')}
                 className={
-                  'rounded-lg border p-3 text-left transition-all ' +
+                  'min-w-0 rounded-lg border px-3 py-2 text-left transition-all ' +
                   (modalidad === 'encargo'
                     ? 'border-accent bg-accent/10 ring-1 ring-accent'
                     : 'border-input bg-background hover:bg-secondary')
                 }
               >
                 <span className="flex items-center gap-1.5 text-sm font-bold text-foreground">
-                  <RefreshCw className="h-4 w-4 text-accent" />
+                  <RefreshCw className="h-4 w-4 shrink-0 text-accent" />
                   Por encargo
                 </span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Se pide a China. Seña del 50% ahora.
+                <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                  Se pide a China, seña del 50%.
                 </span>
               </button>
             </div>
@@ -493,13 +493,15 @@ export function VariantSelector({
                 <Ruler className="h-3.5 w-3.5" /> Tabla de medidas
               </button>
             </div>
-            <p className="mb-3 text-xs text-muted-foreground">
+            <p className="mb-2 text-xs text-muted-foreground">
               {modalidad === 'stock'
-                ? 'Elegí cuántas unidades querés de cada talle. Los tachados no tienen stock.'
-                : 'Elegí cuántas unidades querés de cada talle. Los tachados ya los tenemos acá: están en “Stock inmediato”.'}
+                ? 'Elegí cuántas querés de cada talle. Los tachados no tienen stock.'
+                : 'Elegí cuántas querés de cada talle. Los tachados ya los tenemos acá.'}
             </p>
 
-            <div className="space-y-2">
+            {/* Dos columnas en cuanto hay lugar: una sola fila por talle a lo ancho
+                de toda la ficha deja un hueco enorme entre el talle y el contador. */}
+            <div className="grid gap-1.5 sm:grid-cols-2">
               {talles.map((t) => {
                 const disponible = disponibleEnModalidad(t);
                 // Con stock no se puede pedir más de lo que hay; por encargo no hay tope.
@@ -509,7 +511,7 @@ export function VariantSelector({
                   <div
                     key={t.value.id}
                     className={
-                      'flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ' +
+                      'flex min-w-0 items-center justify-between gap-2 rounded-lg border px-3 py-1.5 ' +
                       (!disponible
                         ? 'border-dashed border-input/60 bg-muted/30'
                         : cantidad > 0
@@ -517,7 +519,7 @@ export function VariantSelector({
                           : 'border-input bg-background')
                     }
                   >
-                    <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2">
                       <span
                         className={
                           'text-sm font-semibold ' +
@@ -527,19 +529,19 @@ export function VariantSelector({
                         {t.value.value}
                       </span>
                       {disponible && modalidad === 'stock' && t.available <= 2 && (
-                        <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                        <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap text-amber-600 dark:text-amber-400">
                           {t.available === 1 ? '¡Última unidad!' : `¡Quedan ${t.available}!`}
                         </span>
                       )}
                       {!disponible && (
-                        <span className="ml-2 text-[11px] text-muted-foreground">
+                        <span className="truncate text-[10px] text-muted-foreground">
                           {modalidad === 'stock' ? 'sin stock' : 'disponible con entrega inmediata'}
                         </span>
                       )}
                     </div>
 
                     {disponible && (
-                      <div className="flex shrink-0 items-center gap-1">
+                      <div className="flex shrink-0 items-center gap-0.5">
                         <button
                           type="button"
                           aria-label={`Quitar una unidad de ${t.value.value}`}
@@ -547,11 +549,11 @@ export function VariantSelector({
                           onClick={() =>
                             setCantidades((c) => ({ ...c, [t.value.id]: Math.max(0, cantidad - 1) }))
                           }
-                          className="h-8 w-8 rounded-md border border-input text-base font-bold text-foreground disabled:opacity-30 hover:bg-secondary"
+                          className="h-7 w-7 rounded-md border border-input text-sm font-bold text-foreground disabled:opacity-30 hover:bg-secondary"
                         >
                           −
                         </button>
-                        <span className="w-8 text-center text-sm font-bold tabular-nums">{cantidad}</span>
+                        <span className="w-6 text-center text-sm font-bold tabular-nums">{cantidad}</span>
                         <button
                           type="button"
                           aria-label={`Agregar una unidad de ${t.value.value}`}
@@ -559,7 +561,7 @@ export function VariantSelector({
                           onClick={() =>
                             setCantidades((c) => ({ ...c, [t.value.id]: Math.min(tope, cantidad + 1) }))
                           }
-                          className="h-8 w-8 rounded-md border border-input text-base font-bold text-foreground disabled:opacity-30 hover:bg-secondary"
+                          className="h-7 w-7 rounded-md border border-input text-sm font-bold text-foreground disabled:opacity-30 hover:bg-secondary"
                         >
                           +
                         </button>

@@ -108,28 +108,31 @@ export default async function ProductPage({ params }: PageProps<'/productos/[slu
       />
 
       {/* Breadcrumbs */}
-      <nav className="mb-6 flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Link href="/" className="hover:text-foreground transition-colors">Inicio</Link>
-        <ChevronRight className="h-3 w-3" />
-        <Link href="/productos" className="hover:text-foreground transition-colors">Productos</Link>
+      {/* `min-w-0` es lo que hace que el truncado del final funcione: sin eso el
+          nombre del producto no puede achicarse, la fila se pasa del ancho de la
+          pantalla y en el celular toda la página se corre para los costados. */}
+      <nav className="mb-6 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <Link href="/" className="shrink-0 hover:text-foreground transition-colors">Inicio</Link>
+        <ChevronRight className="h-3 w-3 shrink-0" />
+        <Link href="/productos" className="shrink-0 hover:text-foreground transition-colors">Productos</Link>
         {product.league && (
           <>
-            <ChevronRight className="h-3 w-3" />
-            <Link href={`/productos?leagueSlug=${product.league.slug}`} className="hover:text-foreground transition-colors">
+            <ChevronRight className="h-3 w-3 shrink-0" />
+            <Link href={`/productos?leagueSlug=${product.league.slug}`} className="shrink-0 whitespace-nowrap hover:text-foreground transition-colors">
               {product.league.name}
             </Link>
           </>
         )}
         {product.team && (
           <>
-            <ChevronRight className="h-3 w-3" />
-            <Link href={`/productos?teamSlug=${product.team.slug}`} className="hover:text-foreground transition-colors">
+            <ChevronRight className="h-3 w-3 shrink-0" />
+            <Link href={`/productos?teamSlug=${product.team.slug}`} className="shrink-0 whitespace-nowrap hover:text-foreground transition-colors">
               {product.team.name}
             </Link>
           </>
         )}
-        <ChevronRight className="h-3 w-3" />
-        <span className="truncate font-medium text-foreground">{product.name}</span>
+        <ChevronRight className="h-3 w-3 shrink-0" />
+        <span className="min-w-0 truncate font-medium text-foreground">{product.name}</span>
       </nav>
 
       <VariantSelector product={product} settings={settings} />
