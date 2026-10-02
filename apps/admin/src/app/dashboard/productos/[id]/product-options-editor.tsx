@@ -21,8 +21,11 @@ const DEFAULT_SIZES = 'S, M, L, XL, XXL';
 
 // Precios de referencia del catalogo actual. Son sugerencias editables, no un
 // tope: la grilla sigue permitiendo cualquier valor por variante.
-const PRECIO_SUGERIDO = '42000';
-const PRECIO_SUGERIDO_MANGA_LARGA = '46000';
+//
+// Estaban en 42000 y 46000, de una lista vieja, y como nadie los corrige al
+// cargar, quedaron siete productos publicados a 42000.
+const PRECIO_SUGERIDO = '50500';
+const PRECIO_SUGERIDO_MANGA_LARGA = '55000';
 
 function toDrafts(options: ProductDetailDto['options']): OptionDraft[] {
   if (options.length === 0) {

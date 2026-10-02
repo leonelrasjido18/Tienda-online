@@ -49,7 +49,17 @@ export default function ProductEditorPage() {
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Talles y variantes
         </h2>
-        <ProductOptionsEditor productId={productId} options={product.options} />
+        {/* La `key` remonta el editor cuando el servidor devuelve otras opciones,
+            igual que la grilla de abajo. Sin esto, la carga rápida creaba la opción
+            Manga en la base, pero el editor seguía mostrando por dentro las opciones
+            viejas; al tocar "Guardar y volver" las reenviaba y borraba la Manga
+            recién creada, con sus variantes. Quedaba como si nunca se hubiera
+            generado nada. */}
+        <ProductOptionsEditor
+          key={product.options.map((o) => `${o.name}:${o.values.map((v) => v.value).join('/')}`).join('|')}
+          productId={productId}
+          options={product.options}
+        />
         <div className="mt-6 border-t border-border pt-6">
           <ProductVariantsGrid
             key={product.variants.map((v) => v.id).join(',')}
