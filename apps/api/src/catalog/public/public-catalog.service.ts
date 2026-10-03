@@ -29,6 +29,24 @@ type FacetFilters = Pick<
   | 'disponibilidad'
 >;
 
+/**
+ * Orden del catálogo. El último criterio es `id`, que es único, y eso es lo que
+ * hace que paginar sea estable.
+ *
+ * Antes se ordenaba sólo por `publishedAt`, y los 2481 productos activos lo
+ * tienen en NULL: para la base todas las filas empataban, así que devolvía el
+ * orden que le resultaba más cómodo en cada consulta. El resultado era que al
+ * pasar de página reaparecían modelos ya vistos y otros no salían nunca.
+ *
+ * Con `nulls: 'last'` los publicados van primero cuando esa fecha exista, y el
+ * resto queda por fecha de alta, del más nuevo al más viejo.
+ */
+const ORDEN_CATALOGO: Prisma.ProductOrderByWithRelationInput[] = [
+  { publishedAt: { sort: 'desc', nulls: 'last' } },
+  { createdAt: 'desc' },
+  { id: 'asc' },
+];
+
 @Injectable()
 export class PublicCatalogService {
   constructor(
@@ -60,12 +78,10 @@ export class PublicCatalogService {
     const needsInMemorySort = query.sort === 'price_asc' || query.sort === 'price_desc';
 
     if (!needsInMemorySort) {
-      const orderBy: Prisma.ProductOrderByWithRelationInput = { publishedAt: 'desc' };
-
       const [rows, total] = await this.prisma.$transaction([
         this.prisma.product.findMany({
           where,
-          orderBy,
+          orderBy: ORDEN_CATALOGO,
           skip: (query.page - 1) * query.perPage,
           take: query.perPage,
           include: this.listInclude(),
@@ -78,6 +94,9 @@ export class PublicCatalogService {
 
     const rows = await this.prisma.product.findMany({
       where,
+      // Sin `orderBy`, cuáles entran en el recorte lo decidía la base a su
+      // criterio y podía cambiar entre consultas.
+      orderBy: ORDEN_CATALOGO,
       take: MAX_SORTABLE_PRODUCTS,
       include: this.listInclude(),
     });
@@ -86,7 +105,10 @@ export class PublicCatalogService {
     items.sort((a, b) => {
       const priceA = a.minPriceCents ?? 0;
       const priceB = b.minPriceCents ?? 0;
-      return query.sort === 'price_asc' ? priceA - priceB : priceB - priceA;
+      const porPrecio = query.sort === 'price_asc' ? priceA - priceB : priceB - priceA;
+      // Casi todo el catálogo vale lo mismo, así que el desempate decide el
+      // orden real de la mayoría de las páginas.
+      return porPrecio !== 0 ? porPrecio : a.id.localeCompare(b.id);
     });
 
     const start = (query.page - 1) * query.perPage;
