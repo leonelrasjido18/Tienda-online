@@ -115,7 +115,8 @@ export async function ProductRail({
   qs: string;
   viewAllHref?: string;
 }) {
-  const data = await apiFetchSafe<Paginated<ProductListItemDto>>(`/catalog/products?${qs}`);
+  // Sin caché: son camisetas, y una ya borrada no puede seguir saliendo en la portada.
+  const data = await apiFetchSafe<Paginated<ProductListItemDto>>(`/catalog/products?${qs}`, { cache: 'no-store' });
   const items = data?.items ?? [];
 
   if (items.length === 0) return null;

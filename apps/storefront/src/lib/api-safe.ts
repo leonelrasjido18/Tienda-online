@@ -11,7 +11,9 @@ export async function apiFetchSafe<T>(path: string, init?: RequestInit): Promise
     const res = await fetch(`${API_URL}${path}`, {
       ...init,
       headers: { 'Content-Type': 'application/json', ...init?.headers },
-      next: { revalidate: 60 },
+      // Con `cache` explícito (por ejemplo 'no-store') no se agrega la revalidación:
+      // Next no admite las dos a la vez.
+      ...(init?.cache ? {} : { next: { revalidate: 60 } }),
     });
     if (!res.ok) return null;
     return (await res.json()) as T;
