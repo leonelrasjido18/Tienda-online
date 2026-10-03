@@ -36,8 +36,27 @@ export class PublicCatalogService {
     private readonly templates: TemplatesService,
   ) {}
 
+  /**
+   * Si hay que ampliar la búsqueda a los nombres de liga.
+   *
+   * Sólo cuando buscar por nombre y equipo no encuentra nada. Así "argentina"
+   * devuelve las camisetas de la selección y no toda la Liga Argentina, y
+   * "premier" —que no aparece en ningún nombre de producto— sigue encontrando
+   * la Premier League.
+   *
+   * El listado y las facetas tienen que tomar la MISMA decisión, o los números
+   * de los filtros no coinciden con los productos que se ven.
+   */
+  private async buscaTambienPorLiga(filters: FacetFilters): Promise<boolean> {
+    if (!filters.q) return false;
+    const porNombreOEquipo = await this.prisma.product.count({
+      where: this.buildWhere(filters, false),
+    });
+    return porNombreOEquipo === 0;
+  }
+
   async listProducts(query: ProductListQuery) {
-    const where = this.buildWhere(query);
+    const where = this.buildWhere(query, await this.buscaTambienPorLiga(query));
     const needsInMemorySort = query.sort === 'price_asc' || query.sort === 'price_desc';
 
     if (!needsInMemorySort) {
@@ -75,7 +94,10 @@ export class PublicCatalogService {
   }
 
   async getFacets(filters: FacetFilters): Promise<ProductFacetsDto> {
-    const where = this.buildWhere(filters);
+    // La misma decisión que toma el listado, o las facetas contarían productos
+    // que la búsqueda no devuelve.
+    const porLiga = await this.buscaTambienPorLiga(filters);
+    const where = this.buildWhere(filters, porLiga);
 
     const [leagueGroups, teamGroups, seasonGroups, priceAgg, sizeRows] = await Promise.all([
       this.prisma.product.groupBy({ by: ['leagueId'], where: { ...where, leagueId: { not: null } }, _count: true }),
@@ -86,7 +108,7 @@ export class PublicCatalogService {
         _min: { priceCents: true },
         _max: { priceCents: true },
       }),
-      this.getSizeFacet(filters),
+      this.getSizeFacet(filters, porLiga),
     ]);
 
     const leagueIds = leagueGroups.map((g) => g.leagueId).filter((id): id is string => id !== null);
@@ -202,26 +224,33 @@ export class PublicCatalogService {
     };
   }
 
-  private buildWhere(filters: FacetFilters): Prisma.ProductWhereInput {
+  private buildWhere(filters: FacetFilters, incluirLiga = false): Prisma.ProductWhereInput {
     const where: Prisma.ProductWhereInput = { status: 'ACTIVE' };
     // Todas las condiciones van por AND: varias usan la misma clave
     // (`variants`) y la ultima en escribir pisaba a la anterior.
     const condiciones: Prisma.ProductWhereInput[] = [];
 
     if (filters.q) {
-      // Cada palabra tiene que aparecer en el nombre, el equipo o la liga.
+      // Cada palabra tiene que aparecer en el nombre o en el equipo.
       // Antes se buscaba la frase entera dentro del nombre, asi que "boca
       // titular" no encontraba nada: el producto se llama "Camiseta Boca
       // Juniors - Titular - 2026-27" y la frase exacta nunca esta.
+      //
+      // La LIGA solo entra como ultimo recurso (ver `buscaTambienPorLiga`). Si
+      // entrara siempre, buscar "argentina" traeria las 83 camisetas de la Liga
+      // Argentina —Boca, River, Colo-Colo— encima de las de la seleccion, que es
+      // lo que se estaba buscando. Al reves pasa con "premier": ningun producto
+      // se llama asi, y ahi la liga es la unica forma de encontrarlo.
       const palabras = filters.q.split(/\s+/).filter(Boolean).slice(0, 6);
       for (const palabra of palabras) {
-        condiciones.push({
-          OR: [
-            { name: { contains: palabra, mode: 'insensitive' } },
-            { team: { name: { contains: palabra, mode: 'insensitive' } } },
-            { league: { name: { contains: palabra, mode: 'insensitive' } } },
-          ],
-        });
+        const alternativas: Prisma.ProductWhereInput[] = [
+          { name: { contains: palabra, mode: 'insensitive' } },
+          { team: { name: { contains: palabra, mode: 'insensitive' } } },
+        ];
+        if (incluirLiga) {
+          alternativas.push({ league: { name: { contains: palabra, mode: 'insensitive' } } });
+        }
+        condiciones.push({ OR: alternativas });
       }
     }
     if (filters.leagueSlug) {
@@ -404,16 +433,27 @@ export class PublicCatalogService {
     };
   }
 
-  private async getSizeFacet(filters: FacetFilters): Promise<{ value: string; count: bigint }[]> {
+  private async getSizeFacet(
+    filters: FacetFilters,
+    incluirLiga = false,
+  ): Promise<{ value: string; count: bigint }[]> {
     // Build dynamic WHERE conditions respecting active filters.
     const conditions: string[] = [`p.status = 'ACTIVE'`];
     const params: unknown[] = [];
     let paramIdx = 1;
 
     if (filters.q) {
-      conditions.push(`p.name ILIKE $${paramIdx}`);
-      params.push(`%${filters.q}%`);
-      paramIdx++;
+      // Palabra por palabra sobre nombre y equipo, igual que `buildWhere`. Acá
+      // se buscaba la frase entera y sólo en el nombre, así que en la pestaña de
+      // stock "boca titular" contaba 0 talles mientras el listado devolvía 26.
+      const palabras = filters.q.split(/\s+/).filter(Boolean).slice(0, 6);
+      for (const palabra of palabras) {
+        const alternativas = [`p.name ILIKE $${paramIdx}`, `t.name ILIKE $${paramIdx}`];
+        if (incluirLiga) alternativas.push(`l.name ILIKE $${paramIdx}`);
+        conditions.push(`(${alternativas.join(' OR ')})`);
+        params.push(`%${palabra}%`);
+        paramIdx++;
+      }
     }
     if (filters.leagueSlug) {
       conditions.push(`l.slug = $${paramIdx}`);
