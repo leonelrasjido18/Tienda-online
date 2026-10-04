@@ -41,6 +41,24 @@ type FacetFilters = Pick<
  * Con `nulls: 'last'` los publicados van primero cuando esa fecha exista, y el
  * resto queda por fecha de alta, del más nuevo al más viejo.
  */
+/**
+ * Orden "relevancia": lo más conocido primero.
+ *
+ * Se ordena por la posición del equipo (`Team.position`), que se define en la base:
+ * selecciones conocidas, clubes argentinos, grandes de Europa y después el resto.
+ * Dentro de un mismo equipo queda lo más nuevo primero. El nombre del equipo desempata
+ * para que equipos con la misma posición no se mezclen entre sí, y `id` cierra el
+ * orden (ver ORDEN_CATALOGO) para que paginar siga siendo estable.
+ *
+ * Los productos sin equipo quedan al final.
+ */
+const ORDEN_RELEVANCIA: Prisma.ProductOrderByWithRelationInput[] = [
+  { team: { position: 'asc' } },
+  { team: { name: 'asc' } },
+  { createdAt: 'desc' },
+  { id: 'asc' },
+];
+
 const ORDEN_CATALOGO: Prisma.ProductOrderByWithRelationInput[] = [
   { publishedAt: { sort: 'desc', nulls: 'last' } },
   { createdAt: 'desc' },
@@ -81,7 +99,7 @@ export class PublicCatalogService {
       const [rows, total] = await this.prisma.$transaction([
         this.prisma.product.findMany({
           where,
-          orderBy: ORDEN_CATALOGO,
+          orderBy: query.sort === 'relevance' ? ORDEN_RELEVANCIA : ORDEN_CATALOGO,
           skip: (query.page - 1) * query.perPage,
           take: query.perPage,
           include: this.listInclude(),
@@ -138,8 +156,8 @@ export class PublicCatalogService {
     const seasonIds = seasonGroups.map((g) => g.seasonId).filter((id): id is string => id !== null);
 
     const [leagues, teams, seasons] = await Promise.all([
-      this.prisma.league.findMany({ where: { id: { in: leagueIds } } }),
-      this.prisma.team.findMany({ where: { id: { in: teamIds } } }),
+      this.prisma.league.findMany({ where: { id: { in: leagueIds } }, orderBy: [{ position: 'asc' }, { name: 'asc' }] }),
+      this.prisma.team.findMany({ where: { id: { in: teamIds } }, orderBy: [{ position: 'asc' }, { name: 'asc' }] }),
       this.prisma.season.findMany({ where: { id: { in: seasonIds } } }),
     ]);
 

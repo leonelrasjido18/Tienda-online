@@ -63,7 +63,8 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
     size: toSingle(rawParams.size),
     minPrice: toSingle(rawParams.minPrice),
     maxPrice: toSingle(rawParams.maxPrice),
-    sort: toSingle(rawParams.sort),
+    // Sin orden elegido, lo más conocido primero (ver ORDEN_RELEVANCIA en la API).
+    sort: toSingle(rawParams.sort) ?? 'relevance',
     page: toSingle(rawParams.page),
     disponibilidad: toSingle(rawParams.disponibilidad),
   });
@@ -125,7 +126,7 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
       size: query.size,
       minPrice: query.minPrice,
       maxPrice: query.maxPrice,
-      sort: query.sort === 'newest' ? undefined : query.sort,
+      sort: query.sort === 'relevance' ? undefined : query.sort,
       disponibilidad: key,
     })}`;
 
@@ -170,7 +171,7 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
           {query.maxPrice !== undefined && (
             <input type="hidden" name="maxPrice" value={query.maxPrice} />
           )}
-          {query.sort && query.sort !== 'newest' && (
+          {query.sort && query.sort !== 'relevance' && (
             <input type="hidden" name="sort" value={query.sort} />
           )}
 
@@ -292,7 +293,7 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
                   // Sin esto, pasar a la página 2 salía de la pestaña elegida y
                   // devolvía el catálogo completo, que es casi todo por encargo.
                   disponibilidad: query.disponibilidad,
-                  sort: query.sort === 'newest' ? undefined : query.sort,
+                  sort: query.sort === 'relevance' ? undefined : query.sort,
                   page: page === 1 ? undefined : String(page),
                 });
 
