@@ -144,7 +144,11 @@ export default async function ProductPage({ params }: PageProps<'/productos/[slu
           <h2 className="mb-5 text-xl font-bold tracking-tight text-foreground">También te puede gustar</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {related.map((item) => (
-              <ProductCard key={item.id} product={item} />
+              <ProductCard
+                key={item.id}
+                product={item}
+                descuentos={{ bank_transfer: settings.bankTransferDiscount, cash: settings.cashDiscount }}
+              />
             ))}
           </div>
         </section>

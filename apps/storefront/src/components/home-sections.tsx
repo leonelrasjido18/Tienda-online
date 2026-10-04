@@ -4,7 +4,7 @@ import { ShieldCheck, Truck, Sparkles, RefreshCw, MessageSquare, ArrowRight } fr
 import type { Paginated, ProductListItemDto, ProductFacetsDto } from '@tienda/shared';
 import { buttonVariants, Card, CardContent } from '@tienda/ui';
 
-import { apiFetchSafe, getStoreSettings } from '@/lib/api-safe';
+import { apiFetchSafe, getPaymentDiscounts, getStoreSettings } from '@/lib/api-safe';
 import { ProductCard } from '@/components/product-card';
 import { LeagueCarousel } from '@/components/league-carousel';
 
@@ -116,7 +116,10 @@ export async function ProductRail({
   viewAllHref?: string;
 }) {
   // Sin caché: son camisetas, y una ya borrada no puede seguir saliendo en la portada.
-  const data = await apiFetchSafe<Paginated<ProductListItemDto>>(`/catalog/products?${qs}`, { cache: 'no-store' });
+  const [data, descuentos] = await Promise.all([
+    apiFetchSafe<Paginated<ProductListItemDto>>(`/catalog/products?${qs}`, { cache: 'no-store' }),
+    getPaymentDiscounts(),
+  ]);
   const items = data?.items ?? [];
 
   if (items.length === 0) return null;
@@ -142,7 +145,7 @@ export async function ProductRail({
         <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-none">
           {items.map((product) => (
             <div key={product.id} className="w-[200px] sm:w-[230px] shrink-0 snap-start">
-              <ProductCard product={product} />
+              <ProductCard product={product} descuentos={descuentos} />
             </div>
           ))}
         </div>

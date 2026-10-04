@@ -1,4 +1,4 @@
-import type { ActivePreorderWindowDto, StoreSettingsDto } from '@tienda/shared';
+import type { ActivePreorderWindowDto, PaymentDiscountSettings, StoreSettingsDto } from '@tienda/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -52,4 +52,20 @@ export async function getStoreSettings(): Promise<StoreSettingsDto> {
 /** Ventana de encargo activa (para la cuenta regresiva). Null si no hay ninguna. */
 export async function getPreorderWindow(): Promise<ActivePreorderWindowDto | null> {
   return apiFetchSafe<ActivePreorderWindowDto>('/preorder/window');
+}
+
+/**
+ * Descuentos por medio de pago que el dueño tiene configurados.
+ *
+ * Es lo único que necesita una tarjeta de producto para anunciar "con
+ * transferencia". Si la API falla, `getStoreSettings` devuelve sin descuento y la
+ * tarjeta simplemente no muestra el aviso: nunca se anuncia un precio dudoso.
+ */
+export async function getPaymentDiscounts(): Promise<PaymentDiscountSettings> {
+  // Sin caché: lo que se anuncia en la tarjeta tiene que ser lo que se cobra. Con
+  // los ajustes guardados 60 s, bajar el porcentaje dejaba un rato el viejo a la vista.
+  const s = await apiFetchSafe<StoreSettingsDto>('/settings', { cache: 'no-store' });
+  return s
+    ? { bank_transfer: s.bankTransferDiscount, cash: s.cashDiscount }
+    : { bank_transfer: DEFAULT_SETTINGS.bankTransferDiscount, cash: DEFAULT_SETTINGS.cashDiscount };
 }

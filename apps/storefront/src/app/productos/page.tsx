@@ -19,6 +19,7 @@ import {
 
 import { apiFetch } from '@/lib/api';
 import { ProductCard } from '@/components/product-card';
+import { getPaymentDiscounts } from '@/lib/api-safe';
 import { ProductFilters } from '@/components/product-filters';
 
 export const metadata = { title: 'Catálogo de Productos — Tienda' };
@@ -92,9 +93,10 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
     disponibilidad: query.disponibilidad,
   });
 
-  const [result, facets] = await Promise.all([
+  const [result, facets, descuentos] = await Promise.all([
     apiFetch<Paginated<ProductListItemDto>>(`/catalog/products?${listQs}`),
     apiFetch<ProductFacetsDto>(`/catalog/facets?${facetsQs}`),
+    getPaymentDiscounts(),
   ]);
 
   const activeFilterCount = [
@@ -262,7 +264,7 @@ export default async function ProductsPage({ searchParams }: PageProps<'/product
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {result.items.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard key={product.id} product={product} descuentos={descuentos} />
               ))}
             </div>
           )}
