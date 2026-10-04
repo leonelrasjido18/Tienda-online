@@ -1,4 +1,6 @@
 import type { ProductDetailDto, ProductListItemDto, ReviewSummaryDto } from '@tienda/shared';
+import { cache } from 'react';
+
 import { getStoreSettings } from '@/lib/api-safe';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -12,7 +14,11 @@ import { ProductReviews } from './product-reviews';
 
 const EMPTY_REVIEWS: ReviewSummaryDto = { average: 0, count: 0, reviews: [] };
 
-async function getProduct(slug: string) {
+/**
+ * `cache` de React: `generateMetadata` y la página piden la misma ficha, y sin esto
+ * cada visita hacía dos pedidos iguales a la API.
+ */
+const getProduct = cache(async (slug: string) => {
   try {
     return await apiFetch<ProductDetailDto>(`/catalog/products/${slug}`);
   } catch (err) {
@@ -21,7 +27,7 @@ async function getProduct(slug: string) {
     }
     throw err;
   }
-}
+});
 
 /** Relacionados: si la API falla, la ficha no se cae, sólo no muestra la sección. */
 async function getRelated(slug: string): Promise<ProductListItemDto[]> {

@@ -2,12 +2,13 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CmsModule } from './cms/cms.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { AppThrottlerGuard } from './common/throttler/app-throttler.guard';
 import type { Env } from './config/env.validation';
 import { validateEnv } from './config/env.validation';
 import { HealthModule } from './health/health.module';
@@ -44,7 +45,7 @@ import { ShippingModule } from './shipping/shipping.module';
   ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: AppThrottlerGuard },
   ],
 })
 export class AppModule {}
